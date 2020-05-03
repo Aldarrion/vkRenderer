@@ -3,7 +3,8 @@
 #include "Logging.h"
 #include "vkr_Assert.h"
 
-#include <vulkan/vulkan_win32.h>
+#include "vulkan/vulkan_win32.h"
+#include "vkr_Shaderc.h"
 
 #include <malloc.h>
 #include <cstdio>
@@ -140,6 +141,7 @@ namespace vkr
     }
 #endif
 
+//------------------------------------------------------------------------------
 VkPhysicalDeviceFeatures CreateRequiredFeatures()
 {
     VkPhysicalDeviceFeatures features{};
@@ -175,10 +177,79 @@ VkBool32 ValidationCallback(
     const char* msg,
     void* userData)
 {
-    Log(LogLevel::Error, "VALIDATION : %s", msg);
+    Log(LogLevel::Error, "VALIDATION %s: %s", layerPrefix, msg);
 
     // Return true only when we want to test the VL themselves
     return VK_FALSE;
+}
+
+RESULT Render::CompileShader(const char* file, ShaderType type, Shader& shader)
+{
+    Log(LogLevel::Info, "---- Compiling shader %s ----", file);
+
+    FILE* f = fopen(file, "r");
+    if (!f)
+    {
+        Log(LogLevel::Error, "Failed to open the file");
+        return R_FAIL;
+    }
+
+    fseek(f , 0 , SEEK_END);
+    auto size = ftell(f);
+    rewind(f);
+
+    char* buffer = (char*)malloc(size);
+    if (!buffer)
+    {
+        free(buffer);
+        Log(LogLevel::Error, "Failed to alloc space for shader file");
+        return R_FAIL;
+    }
+
+    auto readRes = fread(buffer, 1, size, f);
+    auto eof = feof(f);
+    if (readRes != size && !eof)
+    {
+        Log(LogLevel::Error, "Failed to read the shader file, error %d", ferror(f));
+        free(buffer);
+        fclose(f);
+        return R_FAIL;
+    }
+    fclose(f);
+
+    shaderc_shader_kind kind = type == ShaderType::Vertex ? shaderc_glsl_vertex_shader : shaderc_glsl_fragment_shader;
+
+    shaderc_compilation_result_t result = shaderc_compile_into_spv(shadercCompiler_, buffer, readRes, kind, file, "main", nullptr);
+    free(buffer);
+
+    shaderc_compilation_status status = shaderc_result_get_compilation_status(result);
+    
+    const char* msg = shaderc_result_get_error_message(result);
+    auto warningCount = shaderc_result_get_num_warnings(result);
+    auto errorCount = shaderc_result_get_num_errors(result);
+    LogLevel resultLevel = LogLevel::Info;
+    if (errorCount > 0)
+        resultLevel = LogLevel::Error;
+    else if (warningCount > 0)
+        resultLevel = LogLevel::Warning;
+
+    if (msg)
+        Log(resultLevel, msg);
+    Log(resultLevel, "Done with %d errors, %d warnings", errorCount, warningCount);
+
+
+    if (status != shaderc_compilation_status_success)
+    {
+        shaderc_result_release(result);
+        return R_FAIL;
+    }
+
+    shader.Code = (uint*)shaderc_result_get_bytes(result);
+    shader.Length = shaderc_result_get_length(result);
+
+    shaderc_result_release(result);
+
+    return R_OK;
 }
 
 //------------------------------------------------------------------------------
@@ -437,6 +508,22 @@ RESULT Render::InitWin32(HWND hwnd, HINSTANCE hinst)
     if (VKR_FAILED(vkAllocateCommandBuffers(vkDevice_, &cmdBufferInfo, directCmdBuffers_)))
         return R_FAIL;
 
+    //-----------------------
+    // Compile shaders
+
+    shadercCompiler_ = shaderc_compiler_initialize();
+    if (!shadercCompiler_)
+    {
+        Log(LogLevel::Error, "Could not create shaderc compiler");
+        return R_FAIL;
+    }
+
+
+    if (CompileShader("../shaders/triangle.vert", ShaderType::Vertex, triangleVert_) != R_OK)
+        return R_FAIL;
+    if (CompileShader("../shaders/triangle.frag", ShaderType::Fragment, triangleFrag_) != R_OK)
+        return R_FAIL;
+
     return R_OK;
 }
 
@@ -448,6 +535,8 @@ void Render::Update()
     beginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
 
     VKR_CHECK(vkBeginCommandBuffer(directCmdBuffers_[currentBBIdx_], &beginInfo));
+    // Before frame start
+    //-------------------
 
     //-------------------
     // Create render pass
@@ -537,15 +626,72 @@ void Render::Update()
 
     vkCmdBeginRenderPass(directCmdBuffers_[currentBBIdx_], &renderPassBeginInfo, VK_SUBPASS_CONTENTS_INLINE);
 
-    VkClearAttachment clearAtt{};
-    clearAtt.aspectMask         = VK_IMAGE_ASPECT_COLOR_BIT;
-    clearAtt.colorAttachment    = 0;
-    clearAtt.clearValue         = clearVal;
+    //-------------------
+    // Render pass commands
+    
+    //-------------------
+    // Pipeline layout
+    // Pipeline layout is empty for now
+    VkPipelineLayout pipelineLayout{};
+    VkPipelineLayoutCreateInfo plLayoutInfo{};
+    plLayoutInfo.sType          = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+    VKR_CHECK(vkCreatePipelineLayout(vkDevice_, &plLayoutInfo, nullptr, &pipelineLayout));
 
-    VkClearRect clearRect{ VkRect2D { VkOffset2D { 0, 0 }, VkExtent2D { width_, height_ } }, 0, 1 };
+    //-------------------
+    // Create PSO
+    /*typedef struct VkGraphicsPipelineCreateInfo {
+        VkStructureType                                  sType;
+        const void*                                      pNext;
+        VkPipelineCreateFlags                            flags;
+        uint32_t                                         stageCount;
+        const VkPipelineShaderStageCreateInfo*           pStages;
+        const VkPipelineVertexInputStateCreateInfo*      pVertexInputState;
+        const VkPipelineInputAssemblyStateCreateInfo*    pInputAssemblyState;
+        const VkPipelineTessellationStateCreateInfo*     pTessellationState;
+        const VkPipelineViewportStateCreateInfo*         pViewportState;
+        const VkPipelineRasterizationStateCreateInfo*    pRasterizationState;
+        const VkPipelineMultisampleStateCreateInfo*      pMultisampleState;
+        const VkPipelineDepthStencilStateCreateInfo*     pDepthStencilState;
+        const VkPipelineColorBlendStateCreateInfo*       pColorBlendState;
+        const VkPipelineDynamicStateCreateInfo*          pDynamicState;
+        VkPipelineLayout                                 layout;
+        VkRenderPass                                     renderPass;
+        uint32_t                                         subpass;
+        VkPipeline                                       basePipelineHandle;
+        int32_t                                          basePipelineIndex;
+    } VkGraphicsPipelineCreateInfo;*/
 
-    vkCmdClearAttachments(directCmdBuffers_[currentBBIdx_], 1, &clearAtt, 1, &clearRect);
+    VkShaderModuleCreateInfo createInfo{};
+    createInfo.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
+    //createInfo.codeSize = code.size();
+    //createInfo.pCode = reinterpret_cast<const uint32_t*>(code.data());
 
+    VkShaderModule vertexShader;
+    VKR_CHECK(vkCreateShaderModule(vkDevice_, &createInfo, nullptr, &vertexShader));
+
+    VkPipelineShaderStageCreateInfo stages[2];
+    stages[0].sType     = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+    stages[0].stage     = VK_SHADER_STAGE_VERTEX_BIT;
+    stages[0].module    = vertexShader;
+
+    VkPipeline pipeline{};
+    VkGraphicsPipelineCreateInfo plInfo{};
+    plInfo.sType        = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
+    plInfo.stageCount   = 2;
+    //plInfo.
+    //plInfo.layout       = pipelineLayout;
+
+    VKR_CHECK(vkCreateGraphicsPipelines(vkDevice_, VK_NULL_HANDLE, 1, &plInfo, nullptr, &pipeline));
+
+    // End Create PSO
+    //-------------------
+
+    vkCmdBindPipeline(directCmdBuffers_[currentBBIdx_], VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline);
+
+    vkCmdDraw(directCmdBuffers_[currentBBIdx_], 3, 1, 0, 0);
+
+    // End render pass
+    //-------------------
     vkCmdEndRenderPass(directCmdBuffers_[currentBBIdx_]);
 
     vkEndCommandBuffer(directCmdBuffers_[currentBBIdx_]);

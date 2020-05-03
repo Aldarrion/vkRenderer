@@ -3,9 +3,12 @@
 #include "Config.h"
 #include "enums.h"
 #include "Types.h"
+#include "Array.h"
 
 #include "vkr_Windows.h"
 #include "vkr_Vulkan.h"
+
+struct shaderc_compiler;
 
 namespace vkr
 {
@@ -14,7 +17,21 @@ class Render;
 extern Render* g_Render;
 
 //------------------------------------------------------------------------------
+enum class ShaderType
+{
+    Vertex,
+    Fragment
+};
+
+//------------------------------------------------------------------------------
 RESULT CreateRender(uint width, uint height);
+
+//------------------------------------------------------------------------------
+struct Shader
+{
+    uint*   Code;
+    uint64  Length;
+};
 
 //------------------------------------------------------------------------------
 class Render
@@ -72,7 +89,15 @@ private:
     VkCommandBuffer     directCmdBuffers_[BB_IMG_COUNT]{};
 
     // Keep alive objects
-    
+
+    // Shaders
+    shaderc_compiler* shadercCompiler_{};
+
+    Shader triangleVert_{};
+    Shader triangleFrag_{};
+
+private:
+    RESULT CompileShader(const char* file, ShaderType type, Shader& shader);
 };
 
 
