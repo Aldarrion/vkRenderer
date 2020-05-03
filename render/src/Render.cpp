@@ -233,7 +233,7 @@ RESULT Render::CompileShader(const char* file, ShaderType type, Shader& shader)
     else if (warningCount > 0)
         resultLevel = LogLevel::Warning;
 
-    if (msg)
+    if (msg && *msg)
         Log(resultLevel, msg);
     Log(resultLevel, "Done with %d errors, %d warnings", errorCount, warningCount);
 
@@ -247,7 +247,7 @@ RESULT Render::CompileShader(const char* file, ShaderType type, Shader& shader)
     shader.Code = (uint*)shaderc_result_get_bytes(result);
     shader.Length = shaderc_result_get_length(result);
 
-    shaderc_result_release(result);
+    //shaderc_result_release(result);
 
     return R_OK;
 }
@@ -518,7 +518,6 @@ RESULT Render::InitWin32(HWND hwnd, HINSTANCE hinst)
         return R_FAIL;
     }
 
-
     if (CompileShader("../shaders/triangle.vert", ShaderType::Vertex, triangleVert_) != R_OK)
         return R_FAIL;
     if (CompileShader("../shaders/triangle.frag", ShaderType::Fragment, triangleFrag_) != R_OK)
@@ -599,6 +598,135 @@ void Render::Update()
 
 
     //-------------------
+    // Pipeline layout
+    // Pipeline layout is empty for now
+    VkPipelineLayout pipelineLayout{};
+    VkPipelineLayoutCreateInfo plLayoutInfo{};
+    plLayoutInfo.sType          = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+    VKR_CHECK(vkCreatePipelineLayout(vkDevice_, &plLayoutInfo, nullptr, &pipelineLayout));
+
+    //-------------------
+    // Create Pipeline
+    
+    VkPipelineShaderStageCreateInfo stages[2]{};
+    {
+        VkShaderModule vertexShader;
+        VkShaderModuleCreateInfo vertInfo{};
+        vertInfo.sType    = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
+        vertInfo.codeSize = triangleVert_.Length;
+        vertInfo.pCode    = triangleVert_.Code;
+
+        VKR_CHECK(vkCreateShaderModule(vkDevice_, &vertInfo, nullptr, &vertexShader));
+
+        VkShaderModule fragmentShader;
+        VkShaderModuleCreateInfo fragInfo{};
+        fragInfo.sType    = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
+        fragInfo.codeSize = triangleFrag_.Length;
+        fragInfo.pCode    = triangleFrag_.Code;
+
+        VKR_CHECK(vkCreateShaderModule(vkDevice_, &fragInfo, nullptr, &fragmentShader));
+
+        stages[0].sType     = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+        stages[0].stage     = VK_SHADER_STAGE_VERTEX_BIT;
+        stages[0].module    = vertexShader;
+        stages[0].pName     = "main";
+    
+        stages[1].sType     = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+        stages[1].stage     = VK_SHADER_STAGE_FRAGMENT_BIT;
+        stages[1].module    = fragmentShader;
+        stages[1].pName     = "main";
+    }
+
+    VkPipelineVertexInputStateCreateInfo vertexInputInfo{};
+    {
+        vertexInputInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
+    }
+
+    VkPipelineInputAssemblyStateCreateInfo inputAssembly{};
+    {
+        inputAssembly.sType                     = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
+        inputAssembly.topology                  = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
+        inputAssembly.primitiveRestartEnable    = VK_FALSE;
+    }
+
+    VkPipelineViewportStateCreateInfo viewportState{};
+    VkViewport viewport{};
+    VkRect2D scissor{};
+    {
+        viewport.x          = 0.0f;
+        viewport.y          = 0.0f;
+        viewport.width      = (float)width_;
+        viewport.height     = (float)height_;
+        viewport.minDepth   = 0.0f;
+        viewport.maxDepth   = 1.0f;
+
+        scissor.offset = { 0, 0 };
+        scissor.extent = VkExtent2D{ width_, height_ };
+
+        viewportState.sType         = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
+        viewportState.viewportCount = 1;
+        viewportState.pViewports    = &viewport;
+        viewportState.scissorCount  = 1;
+        viewportState.pScissors     = &scissor;
+    }
+
+    VkPipelineRasterizationStateCreateInfo rasterizer{};
+    {
+        rasterizer.sType                    = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
+        rasterizer.depthClampEnable         = VK_FALSE; // Is geometry beyond near-far clamped to near far? (if not, it's discarded)
+        rasterizer.rasterizerDiscardEnable  = VK_FALSE; // If true everything is discarded.
+        rasterizer.polygonMode              = VK_POLYGON_MODE_FILL; // Using any other mode requires enabling GPU feature
+        //rasterizer.polygonMode              = VK_POLYGON_MODE_LINE;
+        rasterizer.lineWidth                = 1.0f;
+        rasterizer.cullMode                 = VK_CULL_MODE_NONE;
+        rasterizer.frontFace                = VK_FRONT_FACE_CLOCKWISE;
+    }
+
+    VkPipelineMultisampleStateCreateInfo multisampling{};
+    {
+        multisampling.sType                 = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
+        multisampling.rasterizationSamples  = VK_SAMPLE_COUNT_1_BIT;
+    }
+
+    VkPipelineDepthStencilStateCreateInfo depthStencil{};
+    {
+        depthStencil.sType              = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
+        depthStencil.depthTestEnable    = VK_TRUE;
+        depthStencil.depthWriteEnable   = VK_TRUE;
+        depthStencil.depthCompareOp     = VK_COMPARE_OP_LESS;
+    }
+
+    VkPipelineColorBlendAttachmentState colorBlendAttachment{};
+    VkPipelineColorBlendStateCreateInfo colorBlending{};
+    {
+        colorBlendAttachment.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
+
+        colorBlending.sType             = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
+        colorBlending.attachmentCount   = 1;
+        colorBlending.pAttachments      = &colorBlendAttachment;
+    }
+
+    VkPipeline pipeline{};
+    VkGraphicsPipelineCreateInfo plInfo{};
+    plInfo.sType                = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
+    plInfo.stageCount           = 2;
+    plInfo.pStages              = stages;
+    plInfo.pVertexInputState    = &vertexInputInfo;
+    plInfo.pInputAssemblyState  = &inputAssembly;
+    plInfo.pViewportState       = &viewportState;
+    plInfo.pRasterizationState  = &rasterizer;
+    plInfo.pMultisampleState    = &multisampling;
+    plInfo.pDepthStencilState   = &depthStencil;
+    plInfo.pColorBlendState     = &colorBlending;
+    plInfo.layout               = pipelineLayout;
+    plInfo.renderPass           = renderPass;
+
+    VKR_CHECK(vkCreateGraphicsPipelines(vkDevice_, VK_NULL_HANDLE, 1, &plInfo, nullptr, &pipeline));
+
+    // End Create Pipeline
+    //-------------------
+
+    //-------------------
     // Create framebuffer
     VkFramebuffer frameBuffer{};
     {
@@ -629,63 +757,6 @@ void Render::Update()
     //-------------------
     // Render pass commands
     
-    //-------------------
-    // Pipeline layout
-    // Pipeline layout is empty for now
-    VkPipelineLayout pipelineLayout{};
-    VkPipelineLayoutCreateInfo plLayoutInfo{};
-    plLayoutInfo.sType          = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
-    VKR_CHECK(vkCreatePipelineLayout(vkDevice_, &plLayoutInfo, nullptr, &pipelineLayout));
-
-    //-------------------
-    // Create PSO
-    /*typedef struct VkGraphicsPipelineCreateInfo {
-        VkStructureType                                  sType;
-        const void*                                      pNext;
-        VkPipelineCreateFlags                            flags;
-        uint32_t                                         stageCount;
-        const VkPipelineShaderStageCreateInfo*           pStages;
-        const VkPipelineVertexInputStateCreateInfo*      pVertexInputState;
-        const VkPipelineInputAssemblyStateCreateInfo*    pInputAssemblyState;
-        const VkPipelineTessellationStateCreateInfo*     pTessellationState;
-        const VkPipelineViewportStateCreateInfo*         pViewportState;
-        const VkPipelineRasterizationStateCreateInfo*    pRasterizationState;
-        const VkPipelineMultisampleStateCreateInfo*      pMultisampleState;
-        const VkPipelineDepthStencilStateCreateInfo*     pDepthStencilState;
-        const VkPipelineColorBlendStateCreateInfo*       pColorBlendState;
-        const VkPipelineDynamicStateCreateInfo*          pDynamicState;
-        VkPipelineLayout                                 layout;
-        VkRenderPass                                     renderPass;
-        uint32_t                                         subpass;
-        VkPipeline                                       basePipelineHandle;
-        int32_t                                          basePipelineIndex;
-    } VkGraphicsPipelineCreateInfo;*/
-
-    VkShaderModuleCreateInfo createInfo{};
-    createInfo.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
-    //createInfo.codeSize = code.size();
-    //createInfo.pCode = reinterpret_cast<const uint32_t*>(code.data());
-
-    VkShaderModule vertexShader;
-    VKR_CHECK(vkCreateShaderModule(vkDevice_, &createInfo, nullptr, &vertexShader));
-
-    VkPipelineShaderStageCreateInfo stages[2];
-    stages[0].sType     = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
-    stages[0].stage     = VK_SHADER_STAGE_VERTEX_BIT;
-    stages[0].module    = vertexShader;
-
-    VkPipeline pipeline{};
-    VkGraphicsPipelineCreateInfo plInfo{};
-    plInfo.sType        = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
-    plInfo.stageCount   = 2;
-    //plInfo.
-    //plInfo.layout       = pipelineLayout;
-
-    VKR_CHECK(vkCreateGraphicsPipelines(vkDevice_, VK_NULL_HANDLE, 1, &plInfo, nullptr, &pipeline));
-
-    // End Create PSO
-    //-------------------
-
     vkCmdBindPipeline(directCmdBuffers_[currentBBIdx_], VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline);
 
     vkCmdDraw(directCmdBuffers_[currentBBIdx_], 3, 1, 0, 0);
