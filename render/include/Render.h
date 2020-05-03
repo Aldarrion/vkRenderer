@@ -29,8 +29,7 @@ RESULT CreateRender(uint width, uint height);
 //------------------------------------------------------------------------------
 struct Shader
 {
-    uint*   Code;
-    uint64  Length;
+    VkShaderModule vkShader;
 };
 
 //------------------------------------------------------------------------------

@@ -66,6 +66,24 @@ const char* ResultToString(VkResult result)
 }
 
 //------------------------------------------------------------------------------
+const char* ShadercStatusToString(shaderc_compilation_status status)
+{
+    switch(status)
+    {
+        case shaderc_compilation_status_success: return "shaderc_compilation_status_success";
+        case shaderc_compilation_status_invalid_stage: return "shaderc_compilation_status_invalid_stage";
+        case shaderc_compilation_status_compilation_error: return "shaderc_compilation_status_compilation_error";
+        case shaderc_compilation_status_internal_error: return "shaderc_compilation_status_internal_error";
+        case shaderc_compilation_status_null_result_object: return "shaderc_compilation_status_null_result_object";
+        case shaderc_compilation_status_invalid_assembly: return "shaderc_compilation_status_invalid_assembly";
+        case shaderc_compilation_status_validation_error: return "shaderc_compilation_status_validation_error";
+        case shaderc_compilation_status_transformation_error: return "shaderc_compilation_status_transformation_error";
+        case shaderc_compilation_status_configuration_error: return "shaderc_compilation_status_configuration_error";
+        default: return "UNKNOWN CODE";
+    }
+}
+
+//------------------------------------------------------------------------------
 bool CheckResult(VkResult result, const char* file, int line, const char* fun)
 {
     if (result != VK_SUCCESS)
@@ -183,6 +201,7 @@ VkBool32 ValidationCallback(
     return VK_FALSE;
 }
 
+//------------------------------------------------------------------------------
 RESULT Render::CompileShader(const char* file, ShaderType type, Shader& shader)
 {
     Log(LogLevel::Info, "---- Compiling shader %s ----", file);
@@ -237,18 +256,25 @@ RESULT Render::CompileShader(const char* file, ShaderType type, Shader& shader)
         Log(resultLevel, msg);
     Log(resultLevel, "Done with %d errors, %d warnings", errorCount, warningCount);
 
-
     if (status != shaderc_compilation_status_success)
+    {
+        shaderc_result_release(result);
+        Log(LogLevel::Error, "Shader creation failed, %s", ShadercStatusToString(status));
+        return R_FAIL;
+    }
+
+    VkShaderModuleCreateInfo shaderInfo{};
+    shaderInfo.sType    = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
+    shaderInfo.codeSize = shaderc_result_get_length(result);
+    shaderInfo.pCode    = (uint*)shaderc_result_get_bytes(result);
+
+    if (VKR_FAILED(vkCreateShaderModule(vkDevice_, &shaderInfo, nullptr, &shader.vkShader)))
     {
         shaderc_result_release(result);
         return R_FAIL;
     }
 
-    shader.Code = (uint*)shaderc_result_get_bytes(result);
-    shader.Length = shaderc_result_get_length(result);
-
-    //shaderc_result_release(result);
-
+    shaderc_result_release(result);
     return R_OK;
 }
 
@@ -610,30 +636,14 @@ void Render::Update()
     
     VkPipelineShaderStageCreateInfo stages[2]{};
     {
-        VkShaderModule vertexShader;
-        VkShaderModuleCreateInfo vertInfo{};
-        vertInfo.sType    = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
-        vertInfo.codeSize = triangleVert_.Length;
-        vertInfo.pCode    = triangleVert_.Code;
-
-        VKR_CHECK(vkCreateShaderModule(vkDevice_, &vertInfo, nullptr, &vertexShader));
-
-        VkShaderModule fragmentShader;
-        VkShaderModuleCreateInfo fragInfo{};
-        fragInfo.sType    = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
-        fragInfo.codeSize = triangleFrag_.Length;
-        fragInfo.pCode    = triangleFrag_.Code;
-
-        VKR_CHECK(vkCreateShaderModule(vkDevice_, &fragInfo, nullptr, &fragmentShader));
-
         stages[0].sType     = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
         stages[0].stage     = VK_SHADER_STAGE_VERTEX_BIT;
-        stages[0].module    = vertexShader;
+        stages[0].module    = triangleVert_.vkShader;
         stages[0].pName     = "main";
     
         stages[1].sType     = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
         stages[1].stage     = VK_SHADER_STAGE_FRAGMENT_BIT;
-        stages[1].module    = fragmentShader;
+        stages[1].module    = triangleFrag_.vkShader;
         stages[1].pName     = "main";
     }
 
