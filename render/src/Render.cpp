@@ -279,6 +279,19 @@ RESULT Render::CompileShader(const char* file, ShaderType type, Shader& shader)
 }
 
 //------------------------------------------------------------------------------
+RESULT Render::ReloadShaders()
+{
+    if (CompileShader("../shaders/triangle.vert", ShaderType::Vertex, triangleVert_) != R_OK)
+        return R_FAIL;
+    if (CompileShader("../shaders/triangle.frag", ShaderType::Fragment, triangleFrag_) != R_OK)
+        return R_FAIL;
+
+    // TODO invalidate PSO cache
+
+    return R_OK;
+}
+
+//------------------------------------------------------------------------------
 RESULT Render::InitWin32(HWND hwnd, HINSTANCE hinst)
 {
     hwnd_ = hwnd;
@@ -544,9 +557,7 @@ RESULT Render::InitWin32(HWND hwnd, HINSTANCE hinst)
         return R_FAIL;
     }
 
-    if (CompileShader("../shaders/triangle.vert", ShaderType::Vertex, triangleVert_) != R_OK)
-        return R_FAIL;
-    if (CompileShader("../shaders/triangle.frag", ShaderType::Fragment, triangleFrag_) != R_OK)
+    if (ReloadShaders() != R_OK)
         return R_FAIL;
 
     return R_OK;

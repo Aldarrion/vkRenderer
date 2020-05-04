@@ -40,6 +40,7 @@ class Render
 public:
     RESULT InitWin32(HWND hwnd, HINSTANCE hinst);
     void Update();
+    RESULT ReloadShaders();
 
 private:
     static constexpr auto VK_VERSION = VK_API_VERSION_1_1;

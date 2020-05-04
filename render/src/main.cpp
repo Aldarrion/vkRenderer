@@ -115,6 +115,10 @@ int CALLBACK WinMain(HINSTANCE instance, HINSTANCE prevInstance, LPSTR cmdLine, 
                     if (msg.wParam == VK_ESCAPE)
                         shouldQuit = true;
                     break;
+                case WM_KEYUP:
+                    if (msg.wParam == VK_F5)
+                        vkr::g_Render->ReloadShaders();
+                    break;
                 default:
                     break;
             }
