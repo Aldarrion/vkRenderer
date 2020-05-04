@@ -95,14 +95,6 @@ bool CheckResult(VkResult result, const char* file, int line, const char* fun)
     return true;
 }
 
-/*#define VKR_CHECK(x) \
-    do {\
-        auto result = x;\
-        if (result != VK_SUCCESS) {\
-            vkr::Log(vkr::LogLevel::Error, "Failed to %s, error: %d", #x, result);\
-        }\
-    } while(false)
-    */
 #define VKR_SUCCEED(x) CheckResult(x, __FILE__, __LINE__, #x)
 #define VKR_CHECK(x) VKR_SUCCEED(x)
 #define VKR_FAILED(x) !VKR_SUCCEED(x)
@@ -202,7 +194,7 @@ VkBool32 ValidationCallback(
 }
 
 //------------------------------------------------------------------------------
-RESULT Render::CompileShader(const char* file, ShaderType type, Shader& shader)
+RESULT Render::CompileShader(const char* file, PipelineStage type, Shader& shader)
 {
     Log(LogLevel::Info, "---- Compiling shader %s ----", file);
 
@@ -236,7 +228,7 @@ RESULT Render::CompileShader(const char* file, ShaderType type, Shader& shader)
     }
     fclose(f);
 
-    shaderc_shader_kind kind = type == ShaderType::Vertex ? shaderc_glsl_vertex_shader : shaderc_glsl_fragment_shader;
+    shaderc_shader_kind kind = type == PipelineStage::PS_VERT ? shaderc_glsl_vertex_shader : shaderc_glsl_fragment_shader;
 
     shaderc_compilation_result_t result = shaderc_compile_into_spv(shadercCompiler_, buffer, readRes, kind, file, "main", nullptr);
     free(buffer);
@@ -281,9 +273,9 @@ RESULT Render::CompileShader(const char* file, ShaderType type, Shader& shader)
 //------------------------------------------------------------------------------
 RESULT Render::ReloadShaders()
 {
-    if (CompileShader("../shaders/triangle.vert", ShaderType::Vertex, triangleVert_) != R_OK)
+    if (CompileShader("../shaders/triangle.vert", PipelineStage::PS_VERT, triangleVert_) != R_OK)
         return R_FAIL;
-    if (CompileShader("../shaders/triangle.frag", ShaderType::Fragment, triangleFrag_) != R_OK)
+    if (CompileShader("../shaders/triangle.frag", PipelineStage::PS_FRAG, triangleFrag_) != R_OK)
         return R_FAIL;
 
     // TODO invalidate PSO cache
@@ -560,20 +552,20 @@ RESULT Render::InitWin32(HWND hwnd, HINSTANCE hinst)
     if (ReloadShaders() != R_OK)
         return R_FAIL;
 
+    //-----------------------
+    // Pipeline layout
+    // Pipeline layout is empty for now
+    VkPipelineLayoutCreateInfo plLayoutInfo{};
+    plLayoutInfo.sType          = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+    if (VKR_FAILED(vkCreatePipelineLayout(vkDevice_, &plLayoutInfo, nullptr, &pipelineLayout_)))
+        return R_FAIL;
+
     return R_OK;
 }
 
 //------------------------------------------------------------------------------
-void Render::Update()
+RESULT Render::BeginRenderPass()
 {
-    VkCommandBufferBeginInfo beginInfo{};
-    beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
-    beginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
-
-    VKR_CHECK(vkBeginCommandBuffer(directCmdBuffers_[currentBBIdx_], &beginInfo));
-    // Before frame start
-    //-------------------
-
     //-------------------
     // Create render pass
     VkRenderPass renderPass{};
@@ -629,32 +621,30 @@ void Render::Update()
         renderPassInfo.pSubpasses = &subpass;
         //renderPassInfo.dependencyCount = 1;
         //renderPassInfo.pDependencies = &dependency;
-    
+
         VKR_CHECK(vkCreateRenderPass(vkDevice_, &renderPassInfo, nullptr, &renderPass));
     }
 
-
-    //-------------------
-    // Pipeline layout
-    // Pipeline layout is empty for now
-    VkPipelineLayout pipelineLayout{};
-    VkPipelineLayoutCreateInfo plLayoutInfo{};
-    plLayoutInfo.sType          = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
-    VKR_CHECK(vkCreatePipelineLayout(vkDevice_, &plLayoutInfo, nullptr, &pipelineLayout));
-
+    #pragma region Pipeline
     //-------------------
     // Create Pipeline
-    
     VkPipelineShaderStageCreateInfo stages[2]{};
+    uint numStages = 0;
+    if (state_.shaders_[PS_VERT])
     {
+        ++numStages;
         stages[0].sType     = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
         stages[0].stage     = VK_SHADER_STAGE_VERTEX_BIT;
-        stages[0].module    = triangleVert_.vkShader;
+        stages[0].module    = state_.shaders_[PS_VERT]->vkShader;
         stages[0].pName     = "main";
+    }
     
+    if (state_.shaders_[PS_FRAG])
+    {
+        ++numStages;
         stages[1].sType     = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
         stages[1].stage     = VK_SHADER_STAGE_FRAGMENT_BIT;
-        stages[1].module    = triangleFrag_.vkShader;
+        stages[1].module    = state_.shaders_[PS_FRAG]->vkShader;
         stages[1].pName     = "main";
     }
 
@@ -730,7 +720,7 @@ void Render::Update()
     VkPipeline pipeline{};
     VkGraphicsPipelineCreateInfo plInfo{};
     plInfo.sType                = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
-    plInfo.stageCount           = 2;
+    plInfo.stageCount           = numStages;
     plInfo.pStages              = stages;
     plInfo.pVertexInputState    = &vertexInputInfo;
     plInfo.pInputAssemblyState  = &inputAssembly;
@@ -739,13 +729,13 @@ void Render::Update()
     plInfo.pMultisampleState    = &multisampling;
     plInfo.pDepthStencilState   = &depthStencil;
     plInfo.pColorBlendState     = &colorBlending;
-    plInfo.layout               = pipelineLayout;
+    plInfo.layout               = pipelineLayout_;
     plInfo.renderPass           = renderPass;
 
     VKR_CHECK(vkCreateGraphicsPipelines(vkDevice_, VK_NULL_HANDLE, 1, &plInfo, nullptr, &pipeline));
-
     // End Create Pipeline
     //-------------------
+    #pragma endregion
 
     //-------------------
     // Create framebuffer
@@ -777,84 +767,84 @@ void Render::Update()
 
     //-------------------
     // Render pass commands
-    
+
     vkCmdBindPipeline(directCmdBuffers_[currentBBIdx_], VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline);
 
-    vkCmdDraw(directCmdBuffers_[currentBBIdx_], 3, 1, 0, 0);
+    return R_OK;
+}
 
-    // End render pass
-    //-------------------
+//------------------------------------------------------------------------------
+RESULT Render::EndRenderPass()
+{
     vkCmdEndRenderPass(directCmdBuffers_[currentBBIdx_]);
 
-    vkEndCommandBuffer(directCmdBuffers_[currentBBIdx_]);
+    state_.Reset();
+
+    return R_OK;
+}
+
+//------------------------------------------------------------------------------
+void Render::Draw(uint vertexCount, uint firstVertex)
+{
+    if (BeginRenderPass() == R_OK)
+        vkCmdDraw(directCmdBuffers_[currentBBIdx_], vertexCount, 1, firstVertex, 0);
+
+    EndRenderPass();
+}
+
+//------------------------------------------------------------------------------
+void Render::Update()
+{
+    VkCommandBufferBeginInfo beginInfo{};
+    beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+    beginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
+
+    VKR_CHECK(vkBeginCommandBuffer(directCmdBuffers_[currentBBIdx_], &beginInfo));
+    // Before frame start
+    //-------------------
+
+    SetShader<PS_VERT>(&triangleVert_);
+    SetShader<PS_FRAG>(&triangleFrag_);
+    Draw(3, 0);
 
     //-------------------
     // Submit
-    #if defined(VKR_USE_TIMELINE_SEMAPHORES)
-        uint64 signalValue = semaphoreValues[currentBBIdx_];
+    vkEndCommandBuffer(directCmdBuffers_[currentBBIdx_]);
 
-        VkTimelineSemaphoreSubmitInfo timelineInfo{};
-        timelineInfo.sType                      = VK_STRUCTURE_TYPE_TIMELINE_SEMAPHORE_SUBMIT_INFO;
-        timelineInfo.signalSemaphoreValueCount  = 1;
-        timelineInfo.pSignalSemaphoreValues     = &signalValue;
+    VkSubmitInfo submit{};
+    submit.sType                = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+    submit.commandBufferCount   = 1;
+    submit.pCommandBuffers      = &directCmdBuffers_[currentBBIdx_];
 
-        VkSubmitInfo submit{};
-        submit.sType                = VK_STRUCTURE_TYPE_SUBMIT_INFO;
-        submit.pNext                = &timelineInfo;
-        submit.waitSemaphoreCount   = 1;
-        submit.pWaitSemaphores      = &directQueueSemaphore_;
-        submit.commandBufferCount   = 1;
-        submit.pCommandBuffers      = &directCmdBuffers_[currentBBIdx_];
-
-        vkQueueSubmit(vkDirectQueue_, 1, &submit, VK_NULL_HANDLE);
-
-        VKR_CHECK(vkAcquireNextImageKHR(vkDevice_, vkSwapchain_, (uint64)-1, nullptr, nullptr, &currentBBIdx_));
-
-        uint64 waitValue = semaphoreValues[currentBBIdx_];
-        semaphoreValues[currentBBIdx_] = signalValue + 1;
-
-        uint64_t value{};
-        VKR_CHECK(vkGetSemaphoreCounterValue(vkDevice_, directQueueSemaphore_, &value));
-        if (value < waitValue)
-        {
-            VkSemaphoreWaitInfo waitInfo;
-            waitInfo.sType = VK_STRUCTURE_TYPE_SEMAPHORE_WAIT_INFO;
-            waitInfo.semaphoreCount = 1;
-            waitInfo.pSemaphores = &directQueueSemaphore_;
-            waitInfo.pValues = &waitValue;
-
-            VKR_CHECK(vkWaitSemaphores(vkDevice_, &waitInfo, (uint64)-1));
-        }
-    #else
-        VkSubmitInfo submit{};
-        submit.sType                = VK_STRUCTURE_TYPE_SUBMIT_INFO;
-        submit.commandBufferCount   = 1;
-        submit.pCommandBuffers      = &directCmdBuffers_[currentBBIdx_];
-
-        VKR_CHECK(vkQueueSubmit(vkDirectQueue_, 1, &submit, directQueueFences_[currentBBIdx_]));
+    VKR_CHECK(vkQueueSubmit(vkDirectQueue_, 1, &submit, directQueueFences_[currentBBIdx_]));
         
-        VkPresentInfoKHR presentInfo{};
-        presentInfo.sType           = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
-        presentInfo.swapchainCount  = 1;
-        presentInfo.pSwapchains     = &vkSwapchain_;
-        presentInfo.pImageIndices   = &currentBBIdx_;
+    VkPresentInfoKHR presentInfo{};
+    presentInfo.sType           = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
+    presentInfo.swapchainCount  = 1;
+    presentInfo.pSwapchains     = &vkSwapchain_;
+    presentInfo.pImageIndices   = &currentBBIdx_;
 
-        VKR_CHECK(vkQueuePresentKHR(vkDirectQueue_, &presentInfo));
+    VKR_CHECK(vkQueuePresentKHR(vkDirectQueue_, &presentInfo));
 
-        VKR_CHECK(vkAcquireNextImageKHR(vkDevice_, vkSwapchain_, (uint64)-1, nullptr, nullptr, &currentBBIdx_));
+    VKR_CHECK(vkAcquireNextImageKHR(vkDevice_, vkSwapchain_, (uint64)-1, nullptr, nullptr, &currentBBIdx_));
 
-        VkResult fenceVal = vkGetFenceStatus(vkDevice_, directQueueFences_[currentBBIdx_]);
-        if (fenceVal == VK_ERROR_DEVICE_LOST)
-            VKR_CHECK(fenceVal);
+    VkResult fenceVal = vkGetFenceStatus(vkDevice_, directQueueFences_[currentBBIdx_]);
+    if (fenceVal == VK_ERROR_DEVICE_LOST)
+        VKR_CHECK(fenceVal);
 
-        if (fenceVal == VK_NOT_READY)
-        {
-            VKR_CHECK(vkWaitForFences(vkDevice_, 1, &directQueueFences_[currentBBIdx_], VK_TRUE, (uint64)-1));
-        }
+    if (fenceVal == VK_NOT_READY)
+    {
+        VKR_CHECK(vkWaitForFences(vkDevice_, 1, &directQueueFences_[currentBBIdx_], VK_TRUE, (uint64)-1));
+    }
 
-        VKR_CHECK(vkResetFences(vkDevice_, 1, &directQueueFences_[currentBBIdx_]));
+    VKR_CHECK(vkResetFences(vkDevice_, 1, &directQueueFences_[currentBBIdx_]));
+}
 
-    #endif
+//------------------------------------------------------------------------------
+void RenderState::Reset()
+{
+    for (int i = 0; i < PS_COUNT; ++i)
+        shaders_[i] = {};
 }
 
 }

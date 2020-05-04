@@ -17,10 +17,11 @@ class Render;
 extern Render* g_Render;
 
 //------------------------------------------------------------------------------
-enum class ShaderType
+enum PipelineStage
 {
-    Vertex,
-    Fragment
+    PS_VERT,
+    PS_FRAG,
+    PS_COUNT
 };
 
 //------------------------------------------------------------------------------
@@ -33,14 +34,31 @@ struct Shader
 };
 
 //------------------------------------------------------------------------------
+struct RenderState
+{
+    Shader* shaders_[PS_COUNT];
+
+    void Reset();
+};
+
+//------------------------------------------------------------------------------
 class Render
 {
     friend RESULT CreateRender(uint width, uint height);
 
 public:
-    RESULT InitWin32(HWND hwnd, HINSTANCE hinst);
-    void Update();
     RESULT ReloadShaders();
+    RESULT InitWin32(HWND hwnd, HINSTANCE hinst);
+
+    template<PipelineStage stage>
+    void SetShader(Shader* shader)
+    {
+        state_.shaders_[stage] = shader;
+    }
+
+    void Draw(uint vertexCount, uint firstVertex);
+
+    void Update();
 
 private:
     static constexpr auto VK_VERSION = VK_API_VERSION_1_1;
@@ -91,13 +109,18 @@ private:
     // Keep alive objects
 
     // Shaders
+    VkPipelineLayout pipelineLayout_{};
     shaderc_compiler* shadercCompiler_{};
+
+    RenderState state_;
 
     Shader triangleVert_{};
     Shader triangleFrag_{};
 
-private:
-    RESULT CompileShader(const char* file, ShaderType type, Shader& shader);
+    RESULT CompileShader(const char* file, PipelineStage type, Shader& shader);
+
+    RESULT BeginRenderPass();
+    RESULT EndRenderPass();
 };
 
 
