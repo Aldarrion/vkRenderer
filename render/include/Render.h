@@ -4,12 +4,23 @@
 #include "enums.h"
 #include "Types.h"
 #include "Array.h"
+#include "VkTypes.h"
 
 #include "vkr_Windows.h"
-#include "vkr_Vulkan.h"
 
 struct shaderc_compiler;
 
+//------------------------------------------------------------------------------
+bool CheckResult(VkResult result, const char* file, int line, const char* fun);
+
+#define VKR_SUCCEED(x) CheckResult(x, __FILE__, __LINE__, #x)
+#define VKR_CHECK(x) VKR_SUCCEED(x)
+#define VKR_FAILED(x) !VKR_SUCCEED(x)
+
+#define VKR_ALLOCA(size) _alloca(size)
+
+
+//------------------------------------------------------------------------------
 namespace vkr
 {
 
@@ -60,6 +71,9 @@ public:
 
     void Update();
 
+    VkDevice GetDevice() const;
+    VmaAllocator GetAllocator() const;
+
 private:
     static constexpr auto VK_VERSION = VK_API_VERSION_1_1;
     static constexpr uint VKR_INVALID = -1;
@@ -105,6 +119,9 @@ private:
     // Command buffers
     VkCommandPool       directCmdPool_{};
     VkCommandBuffer     directCmdBuffers_[BB_IMG_COUNT]{};
+
+    // Allocator
+    VmaAllocator allocator_;
 
     // Keep alive objects
 

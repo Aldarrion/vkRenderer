@@ -21,6 +21,7 @@ add_executable(${PROJ_NAME} WIN32 ${VKR_SOURCES} ${VKR_HEADERS})
 set(VK_SDK_DIR "" CACHE STRING "Root directory of the LunarG SDK")
 
 target_include_directories(${PROJ_NAME} PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/render/include")
+target_include_directories(${PROJ_NAME} PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/extern/VulkanMemoryAllocator/include")
 target_include_directories(${PROJ_NAME} PRIVATE "${VK_SDK_DIR}/Include")
 
 target_link_libraries(${PROJ_NAME} "${VK_SDK_DIR}/Lib/vulkan-1.lib")

@@ -1,10 +1,13 @@
 #include "Render.h"
 
 #include "Logging.h"
+#include "Allocator.h"
+
 #include "vkr_Assert.h"
+#include "vkr_Shaderc.h"
+#include "vkr_Vulkan.h"
 
 #include "vulkan/vulkan_win32.h"
-#include "vkr_Shaderc.h"
 
 #include <malloc.h>
 #include <cstdio>
@@ -94,18 +97,6 @@ bool CheckResult(VkResult result, const char* file, int line, const char* fun)
     }
     return true;
 }
-
-#define VKR_SUCCEED(x) CheckResult(x, __FILE__, __LINE__, #x)
-#define VKR_CHECK(x) VKR_SUCCEED(x)
-#define VKR_FAILED(x) !VKR_SUCCEED(x)
-
-#define VKR_ALLOCA(size) _alloca(size)
-
-#if VKR_DEBUG
-    #define DBG_LOG(msg, ...) vkr::Log(vkr::LogLevel::Info, msg, __VA_ARGS__)
-#else
-    #define DBG_LOG(msg, ...)
-#endif
 
 #if VKR_DEBUG
     //------------------------------------------------------------------------------
@@ -560,6 +551,15 @@ RESULT Render::InitWin32(HWND hwnd, HINSTANCE hinst)
     if (VKR_FAILED(vkCreatePipelineLayout(vkDevice_, &plLayoutInfo, nullptr, &pipelineLayout_)))
         return R_FAIL;
 
+    //-----------------------
+    // Allocator
+    VmaAllocatorCreateInfo allocatorInfo{};
+    allocatorInfo.physicalDevice = vkPhysicalDevice_;
+    allocatorInfo.device = vkDevice_;
+
+    if (VKR_FAILED(vmaCreateAllocator(&allocatorInfo, &allocator_)))
+        return R_FAIL;
+
     return R_OK;
 }
 
@@ -838,6 +838,18 @@ void Render::Update()
     }
 
     VKR_CHECK(vkResetFences(vkDevice_, 1, &directQueueFences_[currentBBIdx_]));
+}
+
+//------------------------------------------------------------------------------
+VkDevice Render::GetDevice() const
+{
+    return vkDevice_;
+}
+
+//------------------------------------------------------------------------------
+VmaAllocator Render::GetAllocator() const
+{
+    return allocator_;
 }
 
 //------------------------------------------------------------------------------
