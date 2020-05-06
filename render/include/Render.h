@@ -39,10 +39,8 @@ enum PipelineStage
 RESULT CreateRender(uint width, uint height);
 
 //------------------------------------------------------------------------------
-struct Shader
-{
-    VkShaderModule vkShader;
-};
+class Shader;
+class Material;
 
 //------------------------------------------------------------------------------
 struct RenderState
@@ -73,6 +71,10 @@ public:
 
     VkDevice GetDevice() const;
     VmaAllocator GetAllocator() const;
+
+    VkCommandBuffer CmdBuff() const;
+
+    RESULT CompileShader(const char* file, PipelineStage type, Shader& shader);
 
 private:
     static constexpr auto VK_VERSION = VK_API_VERSION_1_1;
@@ -131,10 +133,7 @@ private:
 
     RenderState state_;
 
-    Shader triangleVert_{};
-    Shader triangleFrag_{};
-
-    RESULT CompileShader(const char* file, PipelineStage type, Shader& shader);
+    Array<Material*> materials_;
 
     RESULT BeginRenderPass();
     RESULT EndRenderPass();

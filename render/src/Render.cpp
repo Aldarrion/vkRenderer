@@ -2,6 +2,8 @@
 
 #include "Logging.h"
 #include "Allocator.h"
+#include "Shader.h"
+#include "Material.h"
 
 #include "vkr_Assert.h"
 #include "vkr_Shaderc.h"
@@ -264,10 +266,11 @@ RESULT Render::CompileShader(const char* file, PipelineStage type, Shader& shade
 //------------------------------------------------------------------------------
 RESULT Render::ReloadShaders()
 {
-    if (CompileShader("../shaders/triangle.vert", PipelineStage::PS_VERT, triangleVert_) != R_OK)
-        return R_FAIL;
-    if (CompileShader("../shaders/triangle.frag", PipelineStage::PS_FRAG, triangleFrag_) != R_OK)
-        return R_FAIL;
+    for (int i = 0; i < materials_.Count(); ++i)
+    {
+        if (FAILED(materials_[i]->ReloadShaders()))
+            return R_FAIL;
+    }
 
     // TODO invalidate PSO cache
 
@@ -531,6 +534,11 @@ RESULT Render::InitWin32(HWND hwnd, HINSTANCE hinst)
         return R_FAIL;
 
     //-----------------------
+    // TEMP object allocation
+
+    materials_.Add(new Material());
+
+    //-----------------------
     // Compile shaders
 
     shadercCompiler_ = shaderc_compiler_initialize();
@@ -554,8 +562,9 @@ RESULT Render::InitWin32(HWND hwnd, HINSTANCE hinst)
     //-----------------------
     // Allocator
     VmaAllocatorCreateInfo allocatorInfo{};
-    allocatorInfo.physicalDevice = vkPhysicalDevice_;
-    allocatorInfo.device = vkDevice_;
+    allocatorInfo.instance          = vkInstance_;
+    allocatorInfo.physicalDevice    = vkPhysicalDevice_;
+    allocatorInfo.device            = vkDevice_;
 
     if (VKR_FAILED(vmaCreateAllocator(&allocatorInfo, &allocator_)))
         return R_FAIL;
@@ -803,9 +812,10 @@ void Render::Update()
     // Before frame start
     //-------------------
 
-    SetShader<PS_VERT>(&triangleVert_);
-    SetShader<PS_FRAG>(&triangleFrag_);
-    Draw(3, 0);
+    for (int i = 0; i < materials_.Count(); ++i)
+    {
+        materials_[i]->Draw();
+    }
 
     //-------------------
     // Submit
@@ -851,6 +861,13 @@ VmaAllocator Render::GetAllocator() const
 {
     return allocator_;
 }
+
+//------------------------------------------------------------------------------
+VkCommandBuffer Render::CmdBuff() const
+{
+    return directCmdBuffers_[currentBBIdx_];
+}
+
 
 //------------------------------------------------------------------------------
 void RenderState::Reset()
