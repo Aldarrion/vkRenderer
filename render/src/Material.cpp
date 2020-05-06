@@ -1,11 +1,29 @@
 #include "Material.h"
 
 #include "Render.h"
+#include "Texture.h"
 
 #include "vkr_Shaderc.h"
+#include "vkr_Image.h"
 
 namespace vkr
 {
+
+//------------------------------------------------------------------------------
+RESULT Material::Init()
+{
+    int texWidth, texHeight, texChannels;
+    stbi_uc* pixels = stbi_load("textures/grass_tile.png", &texWidth, &texHeight, &texChannels, STBI_rgb_alpha);
+
+    texture_ = new Texture(VK_FORMAT_R8G8B8A8_UNORM, VkExtent3D{ (uint)texWidth, (uint)texHeight, 1 });
+    auto texAllocRes = texture_->Allocate(pixels);
+    stbi_image_free(pixels);
+    
+    if (FAILED(texAllocRes))
+        return R_FAIL;
+
+    return R_OK;
+}
 
 //------------------------------------------------------------------------------
 void Material::Draw()

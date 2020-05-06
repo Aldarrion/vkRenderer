@@ -534,24 +534,6 @@ RESULT Render::InitWin32(HWND hwnd, HINSTANCE hinst)
         return R_FAIL;
 
     //-----------------------
-    // TEMP object allocation
-
-    materials_.Add(new Material());
-
-    //-----------------------
-    // Compile shaders
-
-    shadercCompiler_ = shaderc_compiler_initialize();
-    if (!shadercCompiler_)
-    {
-        Log(LogLevel::Error, "Could not create shaderc compiler");
-        return R_FAIL;
-    }
-
-    if (ReloadShaders() != R_OK)
-        return R_FAIL;
-
-    //-----------------------
     // Pipeline layout
     // Pipeline layout is empty for now
     VkPipelineLayoutCreateInfo plLayoutInfo{};
@@ -567,6 +549,33 @@ RESULT Render::InitWin32(HWND hwnd, HINSTANCE hinst)
     allocatorInfo.device            = vkDevice_;
 
     if (VKR_FAILED(vmaCreateAllocator(&allocatorInfo, &allocator_)))
+        return R_FAIL;
+
+
+    //-----------------------
+    // Material allocation
+    materials_.Add(new Material());
+
+    for (int i = 0; i < materials_.Count(); ++i)
+    {
+        if (FAILED(materials_[i]->Init()))
+        {
+            Log(LogLevel::Error, "Failed to init material");
+            return R_FAIL;
+        }
+    }
+
+
+    //-----------------------
+    // Compile shaders
+    shadercCompiler_ = shaderc_compiler_initialize();
+    if (!shadercCompiler_)
+    {
+        Log(LogLevel::Error, "Could not create shaderc compiler");
+        return R_FAIL;
+    }
+
+    if (ReloadShaders() != R_OK)
         return R_FAIL;
 
     return R_OK;
