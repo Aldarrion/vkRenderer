@@ -745,67 +745,8 @@ RESULT Render::InitWin32(HWND hwnd, HINSTANCE hinst)
 }
 
 //------------------------------------------------------------------------------
-RESULT Render::BeginRenderPass()
+RESULT Render::PrepareForDraw()
 {
-    //-------------------
-    // Create render pass
-    VkRenderPass renderPass{};
-    {
-        VkAttachmentDescription colorAttachment{};
-        colorAttachment.format          = swapChainFormat_;
-        colorAttachment.samples         = VK_SAMPLE_COUNT_1_BIT;
-        colorAttachment.loadOp          = VK_ATTACHMENT_LOAD_OP_CLEAR;
-        colorAttachment.storeOp         = VK_ATTACHMENT_STORE_OP_STORE;
-        colorAttachment.stencilLoadOp   = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
-        colorAttachment.stencilStoreOp  = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-        colorAttachment.initialLayout   = VK_IMAGE_LAYOUT_UNDEFINED;
-        colorAttachment.finalLayout     = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
-
-        VkAttachmentReference colorAttachmentRef{};
-        colorAttachmentRef.attachment   = 0;
-        colorAttachmentRef.layout       = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
-
-        /*VkAttachmentDescription depthAttachment{};
-        depthAttachment.format          = VK_FORMAT_D16_UNORM;
-        depthAttachment.samples         = VK_SAMPLE_COUNT_1_BIT;
-        depthAttachment.loadOp          = VK_ATTACHMENT_LOAD_OP_CLEAR;
-        depthAttachment.storeOp         = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-        depthAttachment.stencilLoadOp   = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
-        depthAttachment.stencilStoreOp  = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-        depthAttachment.initialLayout   = VK_IMAGE_LAYOUT_UNDEFINED;
-        depthAttachment.finalLayout     = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
-
-        VkAttachmentReference depthAttachmentRef{};
-        depthAttachmentRef.attachment   = 1;
-        depthAttachmentRef.layout       = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;*/
-
-        VkSubpassDescription subpass{};
-        subpass.pipelineBindPoint       = VK_PIPELINE_BIND_POINT_GRAPHICS;
-        subpass.colorAttachmentCount    = 1;
-        subpass.pColorAttachments       = &colorAttachmentRef;
-        //subpass.pDepthStencilAttachment = &depthAttachmentRef;
-
-        /*VkSubpassDependency dependency{};
-        dependency.srcSubpass       = VK_SUBPASS_EXTERNAL;
-        dependency.dstSubpass       = 0;
-        dependency.srcStageMask     = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
-        dependency.srcAccessMask    = 0;
-        dependency.dstStageMask     = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
-        dependency.dstAccessMask    = VK_ACCESS_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;*/
-
-        VkAttachmentDescription attachments[1] = { colorAttachment };
-        VkRenderPassCreateInfo renderPassInfo{};
-        renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
-        renderPassInfo.attachmentCount = VKR_ARR_LEN(attachments);
-        renderPassInfo.pAttachments = attachments;
-        renderPassInfo.subpassCount = 1;
-        renderPassInfo.pSubpasses = &subpass;
-        //renderPassInfo.dependencyCount = 1;
-        //renderPassInfo.pDependencies = &dependency;
-
-        VKR_CHECK(vkCreateRenderPass(vkDevice_, &renderPassInfo, nullptr, &renderPass));
-    }
-
     #pragma region Pipeline
     //-------------------
     // Create Pipeline
@@ -911,12 +852,105 @@ RESULT Render::BeginRenderPass()
     plInfo.pDepthStencilState   = &depthStencil;
     plInfo.pColorBlendState     = &colorBlending;
     plInfo.layout               = pipelineLayout_;
-    plInfo.renderPass           = renderPass;
+    plInfo.renderPass           = renderPass_[currentBBIdx_];
 
     VKR_CHECK(vkCreateGraphicsPipelines(vkDevice_, VK_NULL_HANDLE, 1, &plInfo, nullptr, &pipeline));
     // End Create Pipeline
     //-------------------
     #pragma endregion
+
+    //-------------------
+    // Render pass commands
+
+    vkCmdBindPipeline(directCmdBuffers_[currentBBIdx_], VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline);
+
+    return R_OK;
+}
+
+//------------------------------------------------------------------------------
+RESULT Render::AfterDraw()
+{
+    state_.Reset();
+
+    return R_OK;
+}
+
+//------------------------------------------------------------------------------
+void Render::Draw(uint vertexCount, uint firstVertex)
+{
+    if (PrepareForDraw() == R_OK)
+        vkCmdDraw(directCmdBuffers_[currentBBIdx_], vertexCount, 1, firstVertex, 0);
+
+    AfterDraw();
+}
+
+//------------------------------------------------------------------------------
+void Render::Update()
+{
+    //-------------------
+    // Create render pass
+    VkRenderPass renderPass{};
+    {
+        VkAttachmentDescription colorAttachment{};
+        colorAttachment.format          = swapChainFormat_;
+        colorAttachment.samples         = VK_SAMPLE_COUNT_1_BIT;
+        colorAttachment.loadOp          = VK_ATTACHMENT_LOAD_OP_CLEAR;
+        colorAttachment.storeOp         = VK_ATTACHMENT_STORE_OP_STORE;
+        colorAttachment.stencilLoadOp   = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+        colorAttachment.stencilStoreOp  = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+        colorAttachment.initialLayout   = VK_IMAGE_LAYOUT_UNDEFINED;
+        colorAttachment.finalLayout     = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+
+        VkAttachmentReference colorAttachmentRef{};
+        colorAttachmentRef.attachment   = 0;
+        colorAttachmentRef.layout       = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+
+        /*VkAttachmentDescription depthAttachment{};
+        depthAttachment.format          = VK_FORMAT_D16_UNORM;
+        depthAttachment.samples         = VK_SAMPLE_COUNT_1_BIT;
+        depthAttachment.loadOp          = VK_ATTACHMENT_LOAD_OP_CLEAR;
+        depthAttachment.storeOp         = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+        depthAttachment.stencilLoadOp   = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+        depthAttachment.stencilStoreOp  = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+        depthAttachment.initialLayout   = VK_IMAGE_LAYOUT_UNDEFINED;
+        depthAttachment.finalLayout     = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+
+        VkAttachmentReference depthAttachmentRef{};
+        depthAttachmentRef.attachment   = 1;
+        depthAttachmentRef.layout       = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;*/
+
+        VkSubpassDescription subpass{};
+        subpass.pipelineBindPoint       = VK_PIPELINE_BIND_POINT_GRAPHICS;
+        subpass.colorAttachmentCount    = 1;
+        subpass.pColorAttachments       = &colorAttachmentRef;
+        //subpass.pDepthStencilAttachment = &depthAttachmentRef;
+
+        /*VkSubpassDependency dependency{};
+        dependency.srcSubpass       = VK_SUBPASS_EXTERNAL;
+        dependency.dstSubpass       = 0;
+        dependency.srcStageMask     = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+        dependency.srcAccessMask    = 0;
+        dependency.dstStageMask     = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+        dependency.dstAccessMask    = VK_ACCESS_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;*/
+
+        VkAttachmentDescription attachments[1] = { colorAttachment };
+        VkRenderPassCreateInfo renderPassInfo{};
+        renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
+        renderPassInfo.attachmentCount = VKR_ARR_LEN(attachments);
+        renderPassInfo.pAttachments = attachments;
+        renderPassInfo.subpassCount = 1;
+        renderPassInfo.pSubpasses = &subpass;
+        //renderPassInfo.dependencyCount = 1;
+        //renderPassInfo.pDependencies = &dependency;
+
+        VKR_CHECK(vkCreateRenderPass(vkDevice_, &renderPassInfo, nullptr, &renderPass));
+
+        if (renderPass_[currentBBIdx_])
+        {
+            vkDestroyRenderPass(vkDevice_, renderPass_[currentBBIdx_], nullptr);
+        }
+        renderPass_[currentBBIdx_] = renderPass;
+    }
 
     //-------------------
     // Create framebuffer
@@ -935,7 +969,6 @@ RESULT Render::BeginRenderPass()
     }
 
     VkClearValue clearVal{ VkClearColorValue { 0.2f, 0.6f, 0.2f, 1.0f } };
-
     VkRenderPassBeginInfo renderPassBeginInfo{};
     renderPassBeginInfo.sType           = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
     renderPassBeginInfo.renderPass      = renderPass;
@@ -946,36 +979,6 @@ RESULT Render::BeginRenderPass()
 
     vkCmdBeginRenderPass(directCmdBuffers_[currentBBIdx_], &renderPassBeginInfo, VK_SUBPASS_CONTENTS_INLINE);
 
-    //-------------------
-    // Render pass commands
-
-    vkCmdBindPipeline(directCmdBuffers_[currentBBIdx_], VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline);
-
-    return R_OK;
-}
-
-//------------------------------------------------------------------------------
-RESULT Render::EndRenderPass()
-{
-    vkCmdEndRenderPass(directCmdBuffers_[currentBBIdx_]);
-
-    state_.Reset();
-
-    return R_OK;
-}
-
-//------------------------------------------------------------------------------
-void Render::Draw(uint vertexCount, uint firstVertex)
-{
-    if (BeginRenderPass() == R_OK)
-        vkCmdDraw(directCmdBuffers_[currentBBIdx_], vertexCount, 1, firstVertex, 0);
-
-    EndRenderPass();
-}
-
-//------------------------------------------------------------------------------
-void Render::Update()
-{
     // Before frame start
     //-------------------
 
@@ -986,6 +989,9 @@ void Render::Update()
 
     //-------------------
     // Submit and Present
+
+    vkCmdEndRenderPass(directCmdBuffers_[currentBBIdx_]);
+
     vkEndCommandBuffer(directCmdBuffers_[currentBBIdx_]);
 
     VkSubmitInfo submit{};

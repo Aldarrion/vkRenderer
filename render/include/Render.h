@@ -138,6 +138,8 @@ private:
     VkCommandPool       directCmdPool_{};
     VkCommandBuffer     directCmdBuffers_[BB_IMG_COUNT]{};
 
+    VkRenderPass        renderPass_[BB_IMG_COUNT]{};
+
     // Descriptors
     VkDescriptorPool    descPool_{};
 
@@ -154,8 +156,8 @@ private:
 
     Array<Material*> materials_;
 
-    RESULT BeginRenderPass();
-    RESULT EndRenderPass();
+    RESULT PrepareForDraw();
+    RESULT AfterDraw();
 
     RESULT WaitForFence(VkFence fence);
 };
