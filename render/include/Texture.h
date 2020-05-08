@@ -11,7 +11,7 @@ class Texture
 public:
     Texture(VkFormat format, VkExtent3D size);
 
-    RESULT Allocate(void* data);
+    RESULT Allocate(void* data, const char* diagName = nullptr);
     void Free();
 
 private:

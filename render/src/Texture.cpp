@@ -3,6 +3,7 @@
 #include "Render.h"
 #include "Allocator.h"
 #include "Buffer.h"
+#include "Logging.h"
 
 namespace vkr
 {
@@ -15,11 +16,9 @@ Texture::Texture(VkFormat format, VkExtent3D size)
 }
 
 //------------------------------------------------------------------------------
-RESULT Texture::Allocate(void* data)
+RESULT Texture::Allocate(void* data, const char* diagName)
 {
-    VkImageLayout initLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-    if (data)
-        initLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+    VkImageLayout initLayout = VK_IMAGE_LAYOUT_UNDEFINED;
 
     VkImageCreateInfo imgInfo{};
     imgInfo.sType           = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
@@ -39,6 +38,12 @@ RESULT Texture::Allocate(void* data)
 
     if (VKR_FAILED(vmaCreateImage(g_Render->GetAllocator(), &imgInfo, &allocInfo, &image_, &allocation_, nullptr)))
         return R_FAIL;
+
+    if (diagName)
+    {
+        if (VKR_FAILED(SetDiagName(g_Render->GetDevice(), (uint64)image_, VK_OBJECT_TYPE_IMAGE, diagName)))
+            Log(LogLevel::Error, "Could not set diag name to a texture %s", diagName);
+    }
 
     VkImageSubresourceRange subres{};
     subres.aspectMask       = VK_IMAGE_ASPECT_COLOR_BIT;
@@ -67,25 +72,20 @@ RESULT Texture::Allocate(void* data)
         region.imageOffset = { 0, 0, 0 };
         region.imageExtent = size_;
 
+        g_Render->TransitionBarrier(
+            image_, subres,
+            0, VK_ACCESS_SHADER_READ_BIT,
+            VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+            VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT
+        );
+
         vkCmdCopyBufferToImage(g_Render->CmdBuff(), staging.GetBuffer(), image_, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &region);
 
-        VkImageMemoryBarrier barrier{};
-        barrier.sType               = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
-        barrier.srcAccessMask       = VK_ACCESS_TRANSFER_WRITE_BIT;
-        barrier.dstAccessMask       = VK_ACCESS_SHADER_READ_BIT;
-        barrier.oldLayout           = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
-        barrier.newLayout           = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-        barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-        barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-        barrier.image               = image_;
-        barrier.subresourceRange    = subres;
-
-        vkCmdPipelineBarrier(
-            g_Render->CmdBuff(), 
-            VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 0,
-            0, nullptr,
-            0, nullptr,
-            1, &barrier
+        g_Render->TransitionBarrier(
+            image_, subres,
+            VK_ACCESS_TRANSFER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT,
+            VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+            VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT
         );
 
         // TODO put staging to a "keep alive" array

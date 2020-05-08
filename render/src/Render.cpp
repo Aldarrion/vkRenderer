@@ -13,6 +13,7 @@
 
 #include <malloc.h>
 #include <cstdio>
+#include <cfloat>
 
 //------------------------------------------------------------------------------
 const char* ResultToString(VkResult result)
@@ -180,7 +181,7 @@ VkBool32 ValidationCallback(
     const char* msg,
     void* userData)
 {
-    Log(LogLevel::Error, "VALIDATION %s: %s", layerPrefix, msg);
+    Log(LogLevel::Error, "%s: %s", layerPrefix, msg);
 
     // Return true only when we want to test the VL themselves
     return VK_FALSE;
@@ -278,6 +279,69 @@ RESULT Render::ReloadShaders()
 }
 
 //------------------------------------------------------------------------------
+RESULT Render::WaitForFence(VkFence fence)
+{
+    VkResult fenceVal = vkGetFenceStatus(vkDevice_, fence);
+    if (fenceVal == VK_ERROR_DEVICE_LOST)
+    {
+        if (VKR_FAILED(fenceVal))
+            return R_FAIL;
+    }
+
+    if (fenceVal == VK_NOT_READY)
+    {
+        if (VKR_FAILED(vkWaitForFences(vkDevice_, 1, &fence, VK_TRUE, (uint64)-1)))
+            return R_FAIL;
+    }
+
+    if (VKR_FAILED(vkResetFences(vkDevice_, 1, &fence)))
+        return R_FAIL;
+
+    return R_OK;
+}
+
+//------------------------------------------------------------------------------
+PFN_vkSetDebugUtilsObjectNameEXT pfnSetDebugUtilsObjectNameEXT;
+
+//------------------------------------------------------------------------------
+VkResult SetDiagName(VkDevice device, uint64 object, VkObjectType type, const char* name)
+{
+    VkDebugUtilsObjectNameInfoEXT nameInfo{};
+    nameInfo.sType          = VK_STRUCTURE_TYPE_DEBUG_UTILS_OBJECT_NAME_INFO_EXT;
+    nameInfo.objectType     = type;
+    nameInfo.objectHandle   = object;
+    nameInfo.pObjectName    = name;
+
+    return pfnSetDebugUtilsObjectNameEXT(device, &nameInfo);
+}
+
+void Render::TransitionBarrier(
+    VkImage img, VkImageSubresourceRange subresource,
+    VkAccessFlags accessBefore, VkAccessFlags accessAfter,
+    VkImageLayout layoutBefore, VkImageLayout layoutAfter,
+    VkPipelineStageFlags stageBefore, VkPipelineStageFlags stageAfter)
+{
+    VkImageMemoryBarrier barrier{};
+    barrier.sType               = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+    barrier.srcAccessMask       = accessBefore;
+    barrier.dstAccessMask       = accessAfter;
+    barrier.oldLayout           = layoutBefore;
+    barrier.newLayout           = layoutAfter;
+    barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    barrier.image               = img;
+    barrier.subresourceRange    = subresource;
+
+    vkCmdPipelineBarrier(
+        g_Render->CmdBuff(),
+        VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 0,
+        0, nullptr,
+        0, nullptr,
+        1, &barrier
+    );
+}
+
+//------------------------------------------------------------------------------
 RESULT Render::InitWin32(HWND hwnd, HINSTANCE hinst)
 {
     hwnd_ = hwnd;
@@ -319,6 +383,7 @@ RESULT Render::InitWin32(HWND hwnd, HINSTANCE hinst)
         "VK_KHR_win32_surface",
         VK_EXT_DEBUG_REPORT_EXTENSION_NAME,
         VK_KHR_SURFACE_EXTENSION_NAME,
+        VK_EXT_DEBUG_UTILS_EXTENSION_NAME,
     };
 
     instInfo.enabledExtensionCount      = VKR_ARR_LEN(instanceExt);
@@ -424,10 +489,42 @@ RESULT Render::InitWin32(HWND hwnd, HINSTANCE hinst)
     if (VKR_FAILED(vkCreateDevice(vkPhysicalDevice_, &deviceInfo, nullptr, &vkDevice_)))
         return R_FAIL;
 
+    pfnSetDebugUtilsObjectNameEXT = (PFN_vkSetDebugUtilsObjectNameEXT)vkGetDeviceProcAddr(vkDevice_, "vkSetDebugUtilsObjectNameEXT");
+
     vkGetDeviceQueue(vkDevice_, directQueueFamilyIdx_, 0, &vkDirectQueue_);
 
     //-----------------------
     // Create swapchain
+    VkBool32 presentSupport{};
+    if (VKR_FAILED(vkGetPhysicalDeviceSurfaceSupportKHR(vkPhysicalDevice_, directQueueFamilyIdx_, vkSurface_, &presentSupport)))
+        return R_FAIL;
+
+    if (!presentSupport)
+    {
+        Log(LogLevel::Error, "Physical device & queue does not support present");
+        return R_FAIL;
+    }
+
+    uint surfaceFmtCount;
+    if (VKR_FAILED(vkGetPhysicalDeviceSurfaceFormatsKHR(vkPhysicalDevice_, vkSurface_, &surfaceFmtCount, nullptr)))
+        return R_FAIL;
+    auto formats = (VkSurfaceFormatKHR*)VKR_ALLOCA(surfaceFmtCount * sizeof(VkSurfaceFormatKHR));
+    if (VKR_FAILED(vkGetPhysicalDeviceSurfaceFormatsKHR(vkPhysicalDevice_, vkSurface_, &surfaceFmtCount, formats)))
+        return R_FAIL;
+
+    bool formatFound = false;
+    for (uint i = 0; !formatFound && i < surfaceFmtCount; ++i)
+    {
+        if (formats[i].colorSpace == VK_COLORSPACE_SRGB_NONLINEAR_KHR && formats[i].format == VK_FORMAT_B8G8R8A8_SRGB)
+            formatFound = true;
+    }
+
+    if (!formatFound)
+    {
+        Log(LogLevel::Error, "SRGB nonlinear + B8G8R8A8_SRGB surface format not supported");
+        return R_FAIL;
+    }
+
     VkSurfaceCapabilitiesKHR capabilities;
     vkGetPhysicalDeviceSurfaceCapabilitiesKHR(vkPhysicalDevice_, vkSurface_, &capabilities);
 
@@ -435,7 +532,7 @@ RESULT Render::InitWin32(HWND hwnd, HINSTANCE hinst)
     swapchainInfo.sType             = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR;
     swapchainInfo.surface           = vkSurface_;
     swapchainInfo.minImageCount     = 2;
-    swapchainInfo.imageFormat       = swapChainFormat_ = VK_FORMAT_R8G8B8A8_SRGB;
+    swapchainInfo.imageFormat       = swapChainFormat_ = VK_FORMAT_B8G8R8A8_SRGB;
     swapchainInfo.imageColorSpace   = VK_COLORSPACE_SRGB_NONLINEAR_KHR;
     swapchainInfo.imageExtent       = VkExtent2D{ width_, height_ };
     swapchainInfo.imageArrayLayers  = 1; // Non-stereoscopic view
@@ -450,21 +547,6 @@ RESULT Render::InitWin32(HWND hwnd, HINSTANCE hinst)
         return R_FAIL;
 
     //-----------------------
-    // Create semaphores
-    #if defined(VKR_USE_TIMELINE_SEMAPHORES)
-        VkSemaphoreTypeCreateInfo dqSemaphoreTypeInfo{};
-        dqSemaphoreTypeInfo.sType = VK_STRUCTURE_TYPE_SEMAPHORE_TYPE_CREATE_INFO;
-        dqSemaphoreTypeInfo.semaphoreType = VK_SEMAPHORE_TYPE_TIMELINE;
-        dqSemaphoreTypeInfo.initialValue = 0;
-
-        VkSemaphoreCreateInfo dqSemaphoreInfo{};
-        dqSemaphoreInfo.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
-        dqSemaphoreInfo.pNext = &dqSemaphoreTypeInfo;
-
-        vkCreateSemaphore(vkDevice_, &dqSemaphoreInfo, nullptr, &directQueueSemaphore_);
-    #endif
-
-    //-----------------------
     // Create fences
     VkFenceCreateInfo fenceInfo{};
     fenceInfo.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
@@ -475,6 +557,10 @@ RESULT Render::InitWin32(HWND hwnd, HINSTANCE hinst)
         if (VKR_FAILED(vkCreateFence(vkDevice_, &fenceInfo, nullptr, &directQueueFences_[i])))
             return R_FAIL;
     }
+
+    fenceInfo.flags = 0;
+    if (VKR_FAILED(vkCreateFence(vkDevice_, &fenceInfo, nullptr, &nextImageFence_)))
+        return R_FAIL;
 
     //-----------------------
     // Get current back buffer
@@ -488,7 +574,14 @@ RESULT Render::InitWin32(HWND hwnd, HINSTANCE hinst)
     if (VKR_FAILED(vkGetSwapchainImagesKHR(vkDevice_, vkSwapchain_, &swapchainImageCount, bbImages_)))
         return R_FAIL;
 
-    if (VKR_FAILED(vkAcquireNextImageKHR(vkDevice_, vkSwapchain_, (uint64)-1, nullptr, nullptr, &currentBBIdx_)))
+    if (VKR_FAILED(vkAcquireNextImageKHR(vkDevice_, vkSwapchain_, (uint64)-1, VK_NULL_HANDLE, nextImageFence_, &currentBBIdx_)))
+        return R_FAIL;
+
+    if (FAILED(WaitForFence(nextImageFence_)))
+        return R_FAIL;
+
+    // All backbuffers are ready except for the current one we will use right away
+    if (VKR_FAILED(vkResetFences(vkDevice_, 1, &directQueueFences_[currentBBIdx_])))
         return R_FAIL;
 
     //-----------------------
@@ -510,7 +603,11 @@ RESULT Render::InitWin32(HWND hwnd, HINSTANCE hinst)
         imageViewInfo.components        = VkComponentMapping { VK_COMPONENT_SWIZZLE_IDENTITY, VK_COMPONENT_SWIZZLE_IDENTITY, VK_COMPONENT_SWIZZLE_IDENTITY, VK_COMPONENT_SWIZZLE_IDENTITY };
         imageViewInfo.subresourceRange  = subresource;
         
-        vkCreateImageView(vkDevice_, &imageViewInfo, nullptr, &bbViews_[i]);
+        if (VKR_FAILED(vkCreateImageView(vkDevice_, &imageViewInfo, nullptr, &bbViews_[i])))
+            return R_FAIL;
+        
+        if (VKR_FAILED(SetDiagName(vkDevice_, (uint64)bbImages_[i], VK_OBJECT_TYPE_IMAGE, "BackBuffer")))
+            return R_FAIL;
     }
 
 
@@ -533,13 +630,72 @@ RESULT Render::InitWin32(HWND hwnd, HINSTANCE hinst)
     if (VKR_FAILED(vkAllocateCommandBuffers(vkDevice_, &cmdBufferInfo, directCmdBuffers_)))
         return R_FAIL;
 
+    for (int i = 0; i < BB_IMG_COUNT; ++i)
+    {
+        if (VKR_FAILED(SetDiagName(vkDevice_, (uint64)directCmdBuffers_[i], VK_OBJECT_TYPE_COMMAND_BUFFER, "DirectCmdBuffer")))
+            return R_FAIL;
+    }
+
     //-----------------------
     // Pipeline layout
     // Pipeline layout is empty for now
+    VkSamplerCreateInfo pointClampInfo{};
+    pointClampInfo.sType         = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
+    pointClampInfo.magFilter     = VK_FILTER_NEAREST;
+    pointClampInfo.minFilter     = VK_FILTER_NEAREST;
+    pointClampInfo.mipmapMode    = VK_SAMPLER_MIPMAP_MODE_NEAREST;
+    pointClampInfo.addressModeU  = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+    pointClampInfo.addressModeV  = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+    pointClampInfo.addressModeW  = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+    pointClampInfo.maxLod        = FLT_MAX;
+
+    VkSampler pointClamp{};
+    if (VKR_FAILED(vkCreateSampler(vkDevice_, &pointClampInfo, nullptr, &pointClamp)))
+        return R_FAIL;
+    
+    VkSampler samplers[IMMUTABLE_SAMPLER_COUNT] = {
+        pointClamp
+    };
+
+    VkDescriptorSetLayoutBinding bindings[2]{};
+    bindings[0].binding             = 0;
+    bindings[0].descriptorType      = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE;
+    bindings[0].descriptorCount     = FRAG_TEX_COUNT;
+    bindings[0].stageFlags          = VK_SHADER_STAGE_FRAGMENT_BIT;
+
+    bindings[1].binding             = 1;
+    bindings[1].descriptorType      = VK_DESCRIPTOR_TYPE_SAMPLER;
+    bindings[1].descriptorCount     = IMMUTABLE_SAMPLER_COUNT;
+    bindings[1].stageFlags          = VK_SHADER_STAGE_FRAGMENT_BIT;
+    bindings[1].pImmutableSamplers  = samplers;
+
+    VkDescriptorSetLayoutCreateInfo dsLayoutInfo{};
+    dsLayoutInfo.sType          = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+    dsLayoutInfo.bindingCount   = VKR_ARR_LEN(bindings);
+    dsLayoutInfo.pBindings      = bindings;
+
+    VkDescriptorSetLayout dsLayout{};
+    if (VKR_FAILED(vkCreateDescriptorSetLayout(vkDevice_, &dsLayoutInfo, nullptr, &dsLayout)))
+        return R_FAIL;
+
     VkPipelineLayoutCreateInfo plLayoutInfo{};
+    plLayoutInfo.setLayoutCount = 1;
+    plLayoutInfo.pSetLayouts    = &dsLayout;
+
     plLayoutInfo.sType          = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
     if (VKR_FAILED(vkCreatePipelineLayout(vkDevice_, &plLayoutInfo, nullptr, &pipelineLayout_)))
         return R_FAIL;
+
+    //-----------------------
+    // Descriptors
+    //VkDescriptorPoolCreateInfo poolInfo{};
+    //poolInfo.sType  = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
+    //uint32_t                       maxSets;
+    //uint32_t                       poolSizeCount;
+    //const VkDescriptorPoolSize*    pPoolSizes;
+    //
+    //vkCreateDescriptorPool(vkDevice_, &poolInfo, nullptr, &descPool_);
+
 
     //-----------------------
     // Allocator
@@ -550,6 +706,14 @@ RESULT Render::InitWin32(HWND hwnd, HINSTANCE hinst)
 
     if (VKR_FAILED(vmaCreateAllocator(&allocatorInfo, &allocator_)))
         return R_FAIL;
+
+    //-----------------------
+    // Init command buffer
+    VkCommandBufferBeginInfo beginInfo{};
+    beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+    beginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
+
+    VKR_CHECK(vkBeginCommandBuffer(directCmdBuffers_[currentBBIdx_], &beginInfo));
 
 
     //-----------------------
@@ -564,7 +728,6 @@ RESULT Render::InitWin32(HWND hwnd, HINSTANCE hinst)
             return R_FAIL;
         }
     }
-
 
     //-----------------------
     // Compile shaders
@@ -760,7 +923,7 @@ RESULT Render::BeginRenderPass()
     VkFramebuffer frameBuffer{};
     {
         VkFramebufferCreateInfo framebufferInfo{};
-        framebufferInfo.sType           = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+        framebufferInfo.sType           = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
         framebufferInfo.renderPass      = renderPass;
         framebufferInfo.attachmentCount = 1;
         framebufferInfo.pAttachments    = &bbViews_[currentBBIdx_];
@@ -813,11 +976,6 @@ void Render::Draw(uint vertexCount, uint firstVertex)
 //------------------------------------------------------------------------------
 void Render::Update()
 {
-    VkCommandBufferBeginInfo beginInfo{};
-    beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
-    beginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
-
-    VKR_CHECK(vkBeginCommandBuffer(directCmdBuffers_[currentBBIdx_], &beginInfo));
     // Before frame start
     //-------------------
 
@@ -827,7 +985,7 @@ void Render::Update()
     }
 
     //-------------------
-    // Submit
+    // Submit and Present
     vkEndCommandBuffer(directCmdBuffers_[currentBBIdx_]);
 
     VkSubmitInfo submit{};
@@ -845,18 +1003,16 @@ void Render::Update()
 
     VKR_CHECK(vkQueuePresentKHR(vkDirectQueue_, &presentInfo));
 
-    VKR_CHECK(vkAcquireNextImageKHR(vkDevice_, vkSwapchain_, (uint64)-1, nullptr, nullptr, &currentBBIdx_));
+    VKR_CHECK(vkAcquireNextImageKHR(vkDevice_, vkSwapchain_, (uint64)-1, nullptr, nextImageFence_, &currentBBIdx_));
 
-    VkResult fenceVal = vkGetFenceStatus(vkDevice_, directQueueFences_[currentBBIdx_]);
-    if (fenceVal == VK_ERROR_DEVICE_LOST)
-        VKR_CHECK(fenceVal);
+    WaitForFence(nextImageFence_);
+    WaitForFence(directQueueFences_[currentBBIdx_]);
 
-    if (fenceVal == VK_NOT_READY)
-    {
-        VKR_CHECK(vkWaitForFences(vkDevice_, 1, &directQueueFences_[currentBBIdx_], VK_TRUE, (uint64)-1));
-    }
+    VkCommandBufferBeginInfo beginInfo{};
+    beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+    beginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
 
-    VKR_CHECK(vkResetFences(vkDevice_, 1, &directQueueFences_[currentBBIdx_]));
+    VKR_CHECK(vkBeginCommandBuffer(directCmdBuffers_[currentBBIdx_], &beginInfo));
 }
 
 //------------------------------------------------------------------------------

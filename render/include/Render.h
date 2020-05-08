@@ -24,6 +24,11 @@ bool CheckResult(VkResult result, const char* file, int line, const char* fun);
 namespace vkr
 {
 
+//------------------------------------------------------------------------------
+static constexpr uint FRAG_TEX_COUNT = 8;
+static constexpr uint IMMUTABLE_SAMPLER_COUNT = 1;
+
+//------------------------------------------------------------------------------
 class Render;
 extern Render* g_Render;
 
@@ -37,6 +42,9 @@ enum PipelineStage
 
 //------------------------------------------------------------------------------
 RESULT CreateRender(uint width, uint height);
+
+//------------------------------------------------------------------------------
+VkResult SetDiagName(VkDevice device, uint64 object, VkObjectType type, const char* name);
 
 //------------------------------------------------------------------------------
 class Shader;
@@ -76,6 +84,13 @@ public:
 
     RESULT CompileShader(const char* file, PipelineStage type, Shader& shader);
 
+    void TransitionBarrier(
+        VkImage img, VkImageSubresourceRange subresource,
+        VkAccessFlags accessBefore, VkAccessFlags accessAfter,
+        VkImageLayout layoutBefore, VkImageLayout layoutAfter,
+        VkPipelineStageFlags stageBefore, VkPipelineStageFlags stageAfter
+    );
+
 private:
     static constexpr auto VK_VERSION = VK_API_VERSION_1_1;
     static constexpr uint VKR_INVALID = -1;
@@ -113,6 +128,7 @@ private:
     #endif
 
     VkFence             directQueueFences_[BB_IMG_COUNT]{};
+    VkFence             nextImageFence_;
 
     // Queues
     uint                directQueueFamilyIdx_{ VKR_INVALID };
@@ -121,6 +137,9 @@ private:
     // Command buffers
     VkCommandPool       directCmdPool_{};
     VkCommandBuffer     directCmdBuffers_[BB_IMG_COUNT]{};
+
+    // Descriptors
+    VkDescriptorPool    descPool_{};
 
     // Allocator
     VmaAllocator allocator_;
@@ -137,6 +156,8 @@ private:
 
     RESULT BeginRenderPass();
     RESULT EndRenderPass();
+
+    RESULT WaitForFence(VkFence fence);
 };
 
 

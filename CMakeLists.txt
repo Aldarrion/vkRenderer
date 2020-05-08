@@ -41,8 +41,6 @@ if(MSVC)
     add_definitions(/D _CRT_SECURE_NO_WARNINGS)
     target_compile_options(${PROJ_NAME} PRIVATE /WX)
 
-    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /wd4101") # Unreferenced local variable
-
 endif()
 
 # Solution name
