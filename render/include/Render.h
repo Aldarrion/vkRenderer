@@ -120,7 +120,9 @@ private:
     VkImage             bbImages_[BB_IMG_COUNT]{};
     VkImageView         bbViews_[BB_IMG_COUNT]{};
     VkFormat            swapChainFormat_{};
-    
+
+    uint64              m_iFrame{};
+
     // Synchronization
     #if defined(VKR_USE_TIMELINE_SEMAPHORES)
         VkSemaphore         directQueueSemaphore_{};
@@ -141,7 +143,7 @@ private:
     VkRenderPass        renderPass_[BB_IMG_COUNT]{};
 
     // Descriptors
-    VkDescriptorPool    descPool_{};
+    VkDescriptorPool    fsTexDescPools_[BB_IMG_COUNT]{};
 
     // Allocator
     VmaAllocator allocator_;
@@ -149,8 +151,10 @@ private:
     // Keep alive objects
 
     // Shaders
-    VkPipelineLayout pipelineLayout_{};
-    shaderc_compiler* shadercCompiler_{};
+    VkDescriptorSetLayout   fsTexLayout_{};
+    VkPipelineLayout        pipelineLayout_{};
+    
+    shaderc_compiler*       shadercCompiler_{};
 
     RenderState state_;
 

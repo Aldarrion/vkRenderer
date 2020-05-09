@@ -469,11 +469,14 @@ RESULT Render::InitWin32(HWND hwnd, HINSTANCE hinst)
 
     //-----------------------
     // Create Vulkan device
+    VkPhysicalDeviceFeatures features{};
+    vkGetPhysicalDeviceFeatures(vkPhysicalDevice_, &features);
+    // TODO check if the device has all required featues
+
     VkPhysicalDeviceFeatures deviceFeatures = CreateRequiredFeatures();
 
     const char* deviceExt[] = {
         VK_KHR_SWAPCHAIN_EXTENSION_NAME,
-        VK_KHR_TIMELINE_SEMAPHORE_EXTENSION_NAME,
     };
 
     VkDeviceCreateInfo deviceInfo{};
@@ -522,6 +525,26 @@ RESULT Render::InitWin32(HWND hwnd, HINSTANCE hinst)
     if (!formatFound)
     {
         Log(LogLevel::Error, "SRGB nonlinear + B8G8R8A8_SRGB surface format not supported");
+        return R_FAIL;
+    }
+
+    uint presentModeCount{};
+    if (VKR_FAILED(vkGetPhysicalDeviceSurfacePresentModesKHR(vkPhysicalDevice_, vkSurface_, &presentModeCount, nullptr)))
+        return R_FAIL;
+    auto presentModes = (VkPresentModeKHR*)VKR_ALLOCA(presentModeCount * sizeof(VkPresentModeKHR));
+    if (VKR_FAILED(vkGetPhysicalDeviceSurfacePresentModesKHR(vkPhysicalDevice_, vkSurface_, &presentModeCount, presentModes)))
+        return R_FAIL;
+
+    bool modeFound = false;
+    for (uint i = 0; !modeFound && i < presentModeCount; ++i)
+    {
+        if (presentModes[i] == VK_PRESENT_MODE_IMMEDIATE_KHR)
+            modeFound = true;
+    }
+
+    if (!modeFound)
+    {
+        Log(LogLevel::Error, "VK_PRESENT_MODE_IMMEDIATE_KHR not supported");
         return R_FAIL;
     }
 
@@ -674,13 +697,12 @@ RESULT Render::InitWin32(HWND hwnd, HINSTANCE hinst)
     dsLayoutInfo.bindingCount   = VKR_ARR_LEN(bindings);
     dsLayoutInfo.pBindings      = bindings;
 
-    VkDescriptorSetLayout dsLayout{};
-    if (VKR_FAILED(vkCreateDescriptorSetLayout(vkDevice_, &dsLayoutInfo, nullptr, &dsLayout)))
+    if (VKR_FAILED(vkCreateDescriptorSetLayout(vkDevice_, &dsLayoutInfo, nullptr, &fsTexLayout_)))
         return R_FAIL;
 
     VkPipelineLayoutCreateInfo plLayoutInfo{};
     plLayoutInfo.setLayoutCount = 1;
-    plLayoutInfo.pSetLayouts    = &dsLayout;
+    plLayoutInfo.pSetLayouts    = &fsTexLayout_;
 
     plLayoutInfo.sType          = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
     if (VKR_FAILED(vkCreatePipelineLayout(vkDevice_, &plLayoutInfo, nullptr, &pipelineLayout_)))
@@ -688,14 +710,21 @@ RESULT Render::InitWin32(HWND hwnd, HINSTANCE hinst)
 
     //-----------------------
     // Descriptors
-    //VkDescriptorPoolCreateInfo poolInfo{};
-    //poolInfo.sType  = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
-    //uint32_t                       maxSets;
-    //uint32_t                       poolSizeCount;
-    //const VkDescriptorPoolSize*    pPoolSizes;
-    //
-    //vkCreateDescriptorPool(vkDevice_, &poolInfo, nullptr, &descPool_);
+    VkDescriptorPoolSize poolSizes[1]{};
+    poolSizes[0].type              = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE;
+    poolSizes[0].descriptorCount   = FRAG_TEX_COUNT;
 
+    VkDescriptorPoolCreateInfo poolInfo{};
+    poolInfo.sType          = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
+    poolInfo.maxSets        = 128;
+    poolInfo.poolSizeCount  = VKR_ARR_LEN(poolSizes);
+    poolInfo.pPoolSizes     = poolSizes;
+    
+    for (uint i = 0; i < VKR_ARR_LEN(fsTexDescPools_); ++i)
+    {
+        if (VKR_FAILED(vkCreateDescriptorPool(vkDevice_, &poolInfo, nullptr, &fsTexDescPools_[i])))
+            return R_FAIL;
+    }
 
     //-----------------------
     // Allocator
@@ -860,9 +889,21 @@ RESULT Render::PrepareForDraw()
     #pragma endregion
 
     //-------------------
+    // Descriptors
+    VkDescriptorSetAllocateInfo dsAllocInfo{};
+    dsAllocInfo.sType               = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+    dsAllocInfo.descriptorPool      = fsTexDescPools_[currentBBIdx_];
+    dsAllocInfo.descriptorSetCount  = 1;
+    dsAllocInfo.pSetLayouts         = &fsTexLayout_;
+
+    VkDescriptorSet descSets;
+    if (VKR_FAILED(vkAllocateDescriptorSets(vkDevice_, &dsAllocInfo, &descSets)))
+        return R_FAIL;
+
+    //-------------------
     // Render pass commands
 
-    vkCmdBindPipeline(directCmdBuffers_[currentBBIdx_], VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline);
+    vkCmdBindPipeline(CmdBuff(), VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline);
 
     return R_OK;
 }
@@ -1019,6 +1060,10 @@ void Render::Update()
     beginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
 
     VKR_CHECK(vkBeginCommandBuffer(directCmdBuffers_[currentBBIdx_], &beginInfo));
+
+    VKR_CHECK(vkResetDescriptorPool(vkDevice_, fsTexDescPools_[currentBBIdx_], 0));
+
+    ++m_iFrame;
 }
 
 //------------------------------------------------------------------------------
