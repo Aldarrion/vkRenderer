@@ -16,6 +16,12 @@ Texture::Texture(VkFormat format, VkExtent3D size)
 }
 
 //------------------------------------------------------------------------------
+VkImageView Texture::GetView() const
+{
+    return srv_;
+}
+
+//------------------------------------------------------------------------------
 RESULT Texture::Allocate(void* data, const char* diagName)
 {
     VkImageLayout initLayout = VK_IMAGE_LAYOUT_UNDEFINED;

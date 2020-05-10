@@ -4,9 +4,10 @@
 #include "Allocator.h"
 #include "Shader.h"
 #include "Material.h"
+#include "Texture.h"
+#include "ShaderManager.h"
 
 #include "vkr_Assert.h"
-#include "vkr_Shaderc.h"
 #include "vkr_Vulkan.h"
 
 #include "vulkan/vulkan_win32.h"
@@ -67,24 +68,6 @@ const char* ResultToString(VkResult result)
         //case VK_RESULT_BEGIN_RANGE: return "VK_RESULT_BEGIN_RANGE";
         //case VK_RESULT_END_RANGE: return "VK_RESULT_END_RANGE";
         case VK_RESULT_RANGE_SIZE: return "VK_RESULT_RANGE_SIZE";
-        default: return "UNKNOWN CODE";
-    }
-}
-
-//------------------------------------------------------------------------------
-const char* ShadercStatusToString(shaderc_compilation_status status)
-{
-    switch(status)
-    {
-        case shaderc_compilation_status_success: return "shaderc_compilation_status_success";
-        case shaderc_compilation_status_invalid_stage: return "shaderc_compilation_status_invalid_stage";
-        case shaderc_compilation_status_compilation_error: return "shaderc_compilation_status_compilation_error";
-        case shaderc_compilation_status_internal_error: return "shaderc_compilation_status_internal_error";
-        case shaderc_compilation_status_null_result_object: return "shaderc_compilation_status_null_result_object";
-        case shaderc_compilation_status_invalid_assembly: return "shaderc_compilation_status_invalid_assembly";
-        case shaderc_compilation_status_validation_error: return "shaderc_compilation_status_validation_error";
-        case shaderc_compilation_status_transformation_error: return "shaderc_compilation_status_transformation_error";
-        case shaderc_compilation_status_configuration_error: return "shaderc_compilation_status_configuration_error";
         default: return "UNKNOWN CODE";
     }
 }
@@ -188,94 +171,13 @@ VkBool32 ValidationCallback(
 }
 
 //------------------------------------------------------------------------------
-RESULT Render::CompileShader(const char* file, PipelineStage type, Shader& shader)
-{
-    Log(LogLevel::Info, "---- Compiling shader %s ----", file);
-
-    FILE* f = fopen(file, "r");
-    if (!f)
-    {
-        Log(LogLevel::Error, "Failed to open the file");
-        return R_FAIL;
-    }
-
-    fseek(f , 0 , SEEK_END);
-    auto size = ftell(f);
-    rewind(f);
-
-    char* buffer = (char*)malloc(size);
-    if (!buffer)
-    {
-        free(buffer);
-        Log(LogLevel::Error, "Failed to alloc space for shader file");
-        return R_FAIL;
-    }
-
-    auto readRes = fread(buffer, 1, size, f);
-    auto eof = feof(f);
-    if (readRes != size && !eof)
-    {
-        Log(LogLevel::Error, "Failed to read the shader file, error %d", ferror(f));
-        free(buffer);
-        fclose(f);
-        return R_FAIL;
-    }
-    fclose(f);
-
-    shaderc_shader_kind kind = type == PipelineStage::PS_VERT ? shaderc_glsl_vertex_shader : shaderc_glsl_fragment_shader;
-
-    shaderc_compilation_result_t result = shaderc_compile_into_spv(shadercCompiler_, buffer, readRes, kind, file, "main", nullptr);
-    free(buffer);
-
-    shaderc_compilation_status status = shaderc_result_get_compilation_status(result);
-    
-    const char* msg = shaderc_result_get_error_message(result);
-    auto warningCount = shaderc_result_get_num_warnings(result);
-    auto errorCount = shaderc_result_get_num_errors(result);
-    LogLevel resultLevel = LogLevel::Info;
-    if (errorCount > 0)
-        resultLevel = LogLevel::Error;
-    else if (warningCount > 0)
-        resultLevel = LogLevel::Warning;
-
-    if (msg && *msg)
-        Log(resultLevel, msg);
-    Log(resultLevel, "Done with %d errors, %d warnings", errorCount, warningCount);
-
-    if (status != shaderc_compilation_status_success)
-    {
-        shaderc_result_release(result);
-        Log(LogLevel::Error, "Shader creation failed, %s", ShadercStatusToString(status));
-        return R_FAIL;
-    }
-
-    VkShaderModuleCreateInfo shaderInfo{};
-    shaderInfo.sType    = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
-    shaderInfo.codeSize = shaderc_result_get_length(result);
-    shaderInfo.pCode    = (uint*)shaderc_result_get_bytes(result);
-
-    if (VKR_FAILED(vkCreateShaderModule(vkDevice_, &shaderInfo, nullptr, &shader.vkShader)))
-    {
-        shaderc_result_release(result);
-        return R_FAIL;
-    }
-
-    shaderc_result_release(result);
-    return R_OK;
-}
-
-//------------------------------------------------------------------------------
 RESULT Render::ReloadShaders()
 {
-    for (int i = 0; i < materials_.Count(); ++i)
-    {
-        if (FAILED(materials_[i]->ReloadShaders()))
-            return R_FAIL;
-    }
+    vkr_assert(shaderManager_);
 
     // TODO invalidate PSO cache
 
-    return R_OK;
+    return shaderManager_->ReloadShaders();
 }
 
 //------------------------------------------------------------------------------
@@ -744,10 +646,14 @@ RESULT Render::InitWin32(HWND hwnd, HINSTANCE hinst)
 
     VKR_CHECK(vkBeginCommandBuffer(directCmdBuffers_[currentBBIdx_], &beginInfo));
 
+    //-----------------------
+    shaderManager_ = new ShaderManager();
+    if (shaderManager_->Init() != R_OK)
+        return R_FAIL;
 
     //-----------------------
     // Material allocation
-    materials_.Add(new Material());
+    materials_.Add(new TexturedTriangleMaterial());
 
     for (int i = 0; i < materials_.Count(); ++i)
     {
@@ -757,18 +663,6 @@ RESULT Render::InitWin32(HWND hwnd, HINSTANCE hinst)
             return R_FAIL;
         }
     }
-
-    //-----------------------
-    // Compile shaders
-    shadercCompiler_ = shaderc_compiler_initialize();
-    if (!shadercCompiler_)
-    {
-        Log(LogLevel::Error, "Could not create shaderc compiler");
-        return R_FAIL;
-    }
-
-    if (ReloadShaders() != R_OK)
-        return R_FAIL;
 
     return R_OK;
 }
@@ -840,8 +734,8 @@ RESULT Render::PrepareForDraw()
         rasterizer.polygonMode              = VK_POLYGON_MODE_FILL; // Using any other mode requires enabling GPU feature
         //rasterizer.polygonMode              = VK_POLYGON_MODE_LINE;
         rasterizer.lineWidth                = 1.0f;
-        rasterizer.cullMode                 = VK_CULL_MODE_NONE;
-        rasterizer.frontFace                = VK_FRONT_FACE_CLOCKWISE;
+        rasterizer.cullMode                 = VK_CULL_MODE_BACK_BIT;
+        rasterizer.frontFace                = VK_FRONT_FACE_COUNTER_CLOCKWISE;
     }
 
     VkPipelineMultisampleStateCreateInfo multisampling{};
@@ -890,15 +784,41 @@ RESULT Render::PrepareForDraw()
 
     //-------------------
     // Descriptors
-    VkDescriptorSetAllocateInfo dsAllocInfo{};
-    dsAllocInfo.sType               = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
-    dsAllocInfo.descriptorPool      = fsTexDescPools_[currentBBIdx_];
-    dsAllocInfo.descriptorSetCount  = 1;
-    dsAllocInfo.pSetLayouts         = &fsTexLayout_;
+    if (state_.fsTextures_[0]) // Need descriptor set change
+    {
+        VkDescriptorSetAllocateInfo dsAllocInfo{};
+        dsAllocInfo.sType               = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+        dsAllocInfo.descriptorPool      = fsTexDescPools_[currentBBIdx_];
+        dsAllocInfo.descriptorSetCount  = 1;
+        dsAllocInfo.pSetLayouts         = &fsTexLayout_;
 
-    VkDescriptorSet descSets;
-    if (VKR_FAILED(vkAllocateDescriptorSets(vkDevice_, &dsAllocInfo, &descSets)))
-        return R_FAIL;
+        VkDescriptorSet fsTexDs;
+        if (VKR_FAILED(vkAllocateDescriptorSets(vkDevice_, &dsAllocInfo, &fsTexDs)))
+            return R_FAIL;
+
+        // Copy descriptors
+        VkDescriptorImageInfo imgInfo[FRAG_TEX_COUNT]{};
+        imgInfo[0].imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+        imgInfo[0].imageView   = state_.fsTextures_[0]->GetView();
+        for (uint i = 1; i < FRAG_TEX_COUNT; ++i)
+        {
+            imgInfo[i].imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+            imgInfo[i].imageView   = state_.fsTextures_[0]->GetView();
+        }
+
+        VkWriteDescriptorSet fsTexWrite{};
+        fsTexWrite.sType            = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+        fsTexWrite.dstSet           = fsTexDs;
+        fsTexWrite.dstBinding       = 0;
+        fsTexWrite.dstArrayElement  = 0;
+        fsTexWrite.descriptorCount  = FRAG_TEX_COUNT;
+        fsTexWrite.descriptorType   = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE;
+        fsTexWrite.pImageInfo       = imgInfo;
+
+        vkUpdateDescriptorSets(vkDevice_, 1, &fsTexWrite, 0, nullptr);
+
+        vkCmdBindDescriptorSets(CmdBuff(), VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout_, 0, 1, &fsTexDs, 0, nullptr);
+    }
 
     //-------------------
     // Render pass commands
@@ -1079,17 +999,37 @@ VmaAllocator Render::GetAllocator() const
 }
 
 //------------------------------------------------------------------------------
+ShaderManager* Render::GetShaderManager() const
+{
+    return shaderManager_;
+}
+
+//------------------------------------------------------------------------------
 VkCommandBuffer Render::CmdBuff() const
 {
     return directCmdBuffers_[currentBBIdx_];
 }
 
+//------------------------------------------------------------------------------
+void Render::SetTexture(uint slot, Texture* texture)
+{
+    if (state_.fsTextures_[slot] == texture)
+        return;
+
+    state_.fsTextures_[slot] = texture;
+    state_.fsDirtyTextures_ |= (uint64) 1 << slot;
+}
 
 //------------------------------------------------------------------------------
 void RenderState::Reset()
 {
     for (int i = 0; i < PS_COUNT; ++i)
         shaders_[i] = {};
+
+    for (uint i = 0; i < FRAG_TEX_COUNT; ++i)
+        fsTextures_[i] = {};
+
+    fsDirtyTextures_ = 0;
 }
 
 }

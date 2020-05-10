@@ -24,7 +24,7 @@ static LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lPara
 }
 
 //------------------------------------------------------------------------------
-static RESULT InitWindow(int width, int height, HINSTANCE instance)
+static vkr::RESULT InitWindow(int width, int height, HINSTANCE instance)
 {
     WNDCLASSA wCls{};
     wCls.style = CS_HREDRAW | CS_VREDRAW;
@@ -37,7 +37,7 @@ static RESULT InitWindow(int width, int height, HINSTANCE instance)
     if (!RegisterClassA(&wCls))
     {
         Log(vkr::LogLevel::Error, "Failed to register window class, terminating");
-        return R_FAIL;
+        return vkr::R_FAIL;
     }
 
     RECT rc = { 0, 0, width, height};
@@ -57,7 +57,7 @@ static RESULT InitWindow(int width, int height, HINSTANCE instance)
     if (!g_hwnd)
     {
         vkr::Log(vkr::LogLevel::Error, "Failed to create window, terminating");
-        return R_FAIL;
+        return vkr::R_FAIL;
     }
 
     auto hr = ShowWindow(g_hwnd, SW_SHOW);
@@ -65,10 +65,10 @@ static RESULT InitWindow(int width, int height, HINSTANCE instance)
     if (FAILED(hr))
     {
         vkr::Log(vkr::LogLevel::Error, "Failed to show window, terminating");
-        return R_FAIL;
+        return vkr::R_FAIL;
     }
 
-    return R_OK;
+    return vkr::R_OK;
 }
 
 //------------------------------------------------------------------------------

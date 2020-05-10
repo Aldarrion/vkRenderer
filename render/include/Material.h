@@ -1,26 +1,49 @@
 #pragma once
 
-#include "Shader.h"
-#include "Enums.h"
+#include "Config.h"
 
+#include "Enums.h"
 
 namespace vkr
 {
-class Texture;
 
+class Texture;
+class Shader;
+
+//------------------------------------------------------------------------------
 class Material
 {
 public:
-    RESULT Init();
+    virtual RESULT Init() = 0;
+    virtual void Draw() = 0;
+};
 
-    void Draw();
-    RESULT ReloadShaders();
+
+//------------------------------------------------------------------------------
+class TexturedTriangleMaterial : public Material
+{
+public:
+    RESULT Init() override;
+    void Draw() override;
 
 private:
-    Shader triangleVert_{};
-    Shader triangleFrag_{};
+    Shader*     triangleVert_{};
+    Shader*     triangleFrag_{};
+    Texture*    texture_;
+};
 
-    Texture* texture_;
+
+//------------------------------------------------------------------------------
+class ShapeMaterial : public Material
+{
+public:
+    RESULT Init() override;
+    void Draw() override;
+
+private:
+    Shader* shapeVert_{};
+    Shader* shapeFrag_{};
+
 };
 
 }

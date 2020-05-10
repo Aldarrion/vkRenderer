@@ -8,8 +8,6 @@
 
 #include "vkr_Windows.h"
 
-struct shaderc_compiler;
-
 //------------------------------------------------------------------------------
 bool CheckResult(VkResult result, const char* file, int line, const char* fun);
 
@@ -33,14 +31,6 @@ class Render;
 extern Render* g_Render;
 
 //------------------------------------------------------------------------------
-enum PipelineStage
-{
-    PS_VERT,
-    PS_FRAG,
-    PS_COUNT
-};
-
-//------------------------------------------------------------------------------
 RESULT CreateRender(uint width, uint height);
 
 //------------------------------------------------------------------------------
@@ -49,11 +39,16 @@ VkResult SetDiagName(VkDevice device, uint64 object, VkObjectType type, const ch
 //------------------------------------------------------------------------------
 class Shader;
 class Material;
+class Texture;
+class ShaderManager;
 
 //------------------------------------------------------------------------------
 struct RenderState
 {
-    Shader* shaders_[PS_COUNT];
+    Shader*     shaders_[PS_COUNT]{};
+    Texture*    fsTextures_[FRAG_TEX_COUNT]{};
+
+    uint64      fsDirtyTextures_{};
 
     void Reset();
 };
@@ -73,6 +68,8 @@ public:
         state_.shaders_[stage] = shader;
     }
 
+    void SetTexture(uint slot, Texture* texture);
+
     void Draw(uint vertexCount, uint firstVertex);
 
     void Update();
@@ -82,7 +79,7 @@ public:
 
     VkCommandBuffer CmdBuff() const;
 
-    RESULT CompileShader(const char* file, PipelineStage type, Shader& shader);
+    ShaderManager* GetShaderManager() const;
 
     void TransitionBarrier(
         VkImage img, VkImageSubresourceRange subresource,
@@ -151,10 +148,9 @@ private:
     // Keep alive objects
 
     // Shaders
+    ShaderManager*          shaderManager_{};
     VkDescriptorSetLayout   fsTexLayout_{};
     VkPipelineLayout        pipelineLayout_{};
-    
-    shaderc_compiler*       shadercCompiler_{};
 
     RenderState state_;
 

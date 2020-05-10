@@ -14,6 +14,8 @@ public:
     RESULT Allocate(void* data, const char* diagName = nullptr);
     void Free();
 
+    VkImageView GetView() const;
+
 private:
     VkImage         image_;
     VmaAllocation   allocation_;
