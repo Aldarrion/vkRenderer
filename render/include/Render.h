@@ -41,14 +41,22 @@ class Shader;
 class Material;
 class Texture;
 class ShaderManager;
+class VertexBuffer;
 
 //------------------------------------------------------------------------------
 struct RenderState
 {
-    Shader*     shaders_[PS_COUNT]{};
-    Texture*    fsTextures_[FRAG_TEX_COUNT]{};
+    static constexpr uint MAX_VERT_BUFF = 1;
 
-    uint64      fsDirtyTextures_{};
+    Shader*         shaders_[PS_COUNT]{};
+    Texture*        fsTextures_[FRAG_TEX_COUNT]{};
+
+    uint64          fsDirtyTextures_{};
+
+    VkBuffer        vertexBuffers_[MAX_VERT_BUFF];
+    VkDeviceSize    vbOffsets_[MAX_VERT_BUFF];
+    
+    VkPipelineVertexInputStateCreateInfo* vertexLayouts_[MAX_VERT_BUFF];
 
     void Reset();
 };
@@ -69,6 +77,8 @@ public:
     }
 
     void SetTexture(uint slot, Texture* texture);
+    void SetVertexBuffer(uint slot, VertexBuffer* buffer, uint offset);
+    void SetVertexLayout(uint slot, VkPipelineVertexInputStateCreateInfo* layout);
 
     void Draw(uint vertexCount, uint firstVertex);
 

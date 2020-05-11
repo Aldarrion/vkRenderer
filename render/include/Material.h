@@ -9,6 +9,7 @@ namespace vkr
 
 class Texture;
 class Shader;
+class VertexBuffer;
 
 //------------------------------------------------------------------------------
 class Material
@@ -41,9 +42,9 @@ public:
     void Draw() override;
 
 private:
-    Shader* shapeVert_{};
-    Shader* shapeFrag_{};
-
+    Shader*         shapeVert_{};
+    Shader*         shapeFrag_{};
+    VertexBuffer*   vertexBuffer_{};
 };
 
 }

@@ -6,6 +6,7 @@
 #include "Material.h"
 #include "Texture.h"
 #include "ShaderManager.h"
+#include "VertexBuffer.h"
 
 #include "vkr_Assert.h"
 #include "vkr_Vulkan.h"
@@ -768,7 +769,14 @@ RESULT Render::PrepareForDraw()
     plInfo.sType                = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
     plInfo.stageCount           = numStages;
     plInfo.pStages              = stages;
-    plInfo.pVertexInputState    = &vertexInputInfo;
+    if (state_.vertexLayouts_[0])
+    {
+        plInfo.pVertexInputState    = state_.vertexLayouts_[0];
+    }
+    else
+    {
+        plInfo.pVertexInputState    = &vertexInputInfo;
+    }
     plInfo.pInputAssemblyState  = &inputAssembly;
     plInfo.pViewportState       = &viewportState;
     plInfo.pRasterizationState  = &rasterizer;
@@ -821,8 +829,12 @@ RESULT Render::PrepareForDraw()
         vkCmdBindDescriptorSets(CmdBuff(), VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout_, 0, 1, &fsTexDs, 0, nullptr);
     }
 
-    //-------------------
-    // Render pass commands
+    // Vertex buffers
+
+    if (state_.vertexBuffers_[0])
+    {
+        vkCmdBindVertexBuffers(CmdBuff(), 0, RenderState::MAX_VERT_BUFF, state_.vertexBuffers_, state_.vbOffsets_);
+    }
 
     vkCmdBindPipeline(CmdBuff(), VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline);
 
@@ -1022,6 +1034,21 @@ void Render::SetTexture(uint slot, Texture* texture)
 }
 
 //------------------------------------------------------------------------------
+void Render::SetVertexBuffer(uint slot, VertexBuffer* buffer, uint offset)
+{
+    vkr_assert(slot < RenderState::MAX_VERT_BUFF);
+
+    state_.vertexBuffers_[slot] = buffer->GetBuffer();
+    state_.vbOffsets_[slot] = offset;
+}
+
+//------------------------------------------------------------------------------
+void Render::SetVertexLayout(uint slot, VkPipelineVertexInputStateCreateInfo* layout)
+{
+    state_.vertexLayouts_[slot] = layout;
+}
+
+//------------------------------------------------------------------------------
 void RenderState::Reset()
 {
     for (int i = 0; i < PS_COUNT; ++i)
@@ -1031,6 +1058,13 @@ void RenderState::Reset()
         fsTextures_[i] = {};
 
     fsDirtyTextures_ = 0;
+
+    for (int i = 0; i < MAX_VERT_BUFF; ++i)
+    {
+        vertexBuffers_[i] = {};
+        vbOffsets_[i] = {};
+        vertexLayouts_[i] = {};
+    }
 }
 
 }
