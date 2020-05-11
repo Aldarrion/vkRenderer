@@ -62,7 +62,7 @@ void ShapeMaterial::Draw()
     g_Render->SetShader<PS_VERT>(shapeVert_);
     g_Render->SetShader<PS_FRAG>(shapeFrag_);
 
-    g_Render->Draw(3, 0);
+    g_Render->Draw(20 * 3, 0);
 }
 
 }

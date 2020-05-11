@@ -654,6 +654,7 @@ RESULT Render::InitWin32(HWND hwnd, HINSTANCE hinst)
     //-----------------------
     // Material allocation
     materials_.Add(new TexturedTriangleMaterial());
+    materials_.Add(new ShapeMaterial());
 
     for (int i = 0; i < materials_.Count(); ++i)
     {
@@ -734,7 +735,7 @@ RESULT Render::PrepareForDraw()
         rasterizer.polygonMode              = VK_POLYGON_MODE_FILL; // Using any other mode requires enabling GPU feature
         //rasterizer.polygonMode              = VK_POLYGON_MODE_LINE;
         rasterizer.lineWidth                = 1.0f;
-        rasterizer.cullMode                 = VK_CULL_MODE_BACK_BIT;
+        rasterizer.cullMode                 = VK_CULL_MODE_NONE;
         rasterizer.frontFace                = VK_FRONT_FACE_COUNTER_CLOCKWISE;
     }
 
