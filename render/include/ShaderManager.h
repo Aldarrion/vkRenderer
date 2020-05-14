@@ -9,6 +9,8 @@
 #include <unordered_map>
 
 struct shaderc_compiler;
+struct shaderc_compile_options;
+
 
 namespace vkr
 {
@@ -27,8 +29,9 @@ public:
 private:
     std::unordered_map<const char*, Shader*>    cache_;
     
-    Array<VkShaderModule>   toDestroy_;
-    shaderc_compiler*       shadercCompiler_{};
+    Array<VkShaderModule>       toDestroy_;
+    shaderc_compiler*           shadercCompiler_{};
+    shaderc_compile_options*    opts_;
 
     RESULT CompileShader(const char* file, PipelineStage type, Shader& shader) const;
     RESULT CreateShader(const char* name, Shader* shader) const;

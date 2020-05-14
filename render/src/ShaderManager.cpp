@@ -12,8 +12,8 @@ namespace vkr
 {
 
 //------------------------------------------------------------------------------
-static constexpr const char* FRAG_EXT = "frag";
-static constexpr const char* VERT_EXT = "vert";
+static constexpr const char* FRAG_EXT = "fs";
+static constexpr const char* VERT_EXT = "vs";
 
 //------------------------------------------------------------------------------
 const char* ShadercStatusToString(shaderc_compilation_status status)
@@ -42,6 +42,9 @@ RESULT ShaderManager::Init()
         Log(LogLevel::Error, "Could not create shaderc compiler");
         return R_FAIL;
     }
+
+    opts_ = shaderc_compile_options_initialize();
+    shaderc_compile_options_set_source_language(opts_, shaderc_source_language_hlsl);
 
     return R_OK;
 }
@@ -83,7 +86,7 @@ RESULT ShaderManager::CompileShader(const char* file, PipelineStage type, Shader
 
     shaderc_shader_kind kind = type == PipelineStage::PS_VERT ? shaderc_glsl_vertex_shader : shaderc_glsl_fragment_shader;
 
-    shaderc_compilation_result_t result = shaderc_compile_into_spv(shadercCompiler_, buffer, readRes, kind, file, "main", nullptr);
+    shaderc_compilation_result_t result = shaderc_compile_into_spv(shadercCompiler_, buffer, readRes, kind, file, "main", opts_);
     free(buffer);
 
     shaderc_compilation_status status = shaderc_result_get_compilation_status(result);
@@ -129,17 +132,17 @@ RESULT ShaderManager::CreateShader(const char* name, Shader* shader) const
     vkr_assert(shader);
 
     const uint nameLen = (uint)strlen(name);
-    if (nameLen < 6)
-        Log(LogLevel::Error, "Invalid shader name: %s, name must end with valid pipeline stage extension such as .frag or .vert", name);
+    if (nameLen < 9)
+        Log(LogLevel::Error, "Invalid shader name: %s, name must end with valid pipeline stage extension such as _ps.hlsl or _vs.hlsl", name);
 
-    const char* ext = name + nameLen - 4;
+    const char* ext = name + nameLen - 7;
 
     PipelineStage stage;
-    if (strcmp(ext, FRAG_EXT) == 0)
+    if (strncmp(ext, FRAG_EXT, 2) == 0)
     {
         stage = PipelineStage::PS_FRAG;
     }
-    else if (strcmp(ext, VERT_EXT) == 0)
+    else if (strncmp(ext, VERT_EXT, 2) == 0)
     {
         stage = PipelineStage::PS_VERT;
     }

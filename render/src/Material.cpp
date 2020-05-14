@@ -26,8 +26,8 @@ RESULT TexturedTriangleMaterial::Init()
     if (FAILED(texAllocRes))
         return R_FAIL;
 
-    triangleVert_ = g_Render->GetShaderManager()->GetOrCreateShader("triangle.vert");
-    triangleFrag_ = g_Render->GetShaderManager()->GetOrCreateShader("triangle.frag");
+    triangleVert_ = g_Render->GetShaderManager()->GetOrCreateShader("Triangle_vs.hlsl");
+    triangleFrag_ = g_Render->GetShaderManager()->GetOrCreateShader("Triangle_fs.hlsl");
 
     if (!triangleVert_ || !triangleFrag_)
         return R_FAIL;
@@ -61,8 +61,8 @@ struct ShapeVertex
 //------------------------------------------------------------------------------
 RESULT ShapeMaterial::Init()
 {
-    shapeVert_ = g_Render->GetShaderManager()->GetOrCreateShader("shape.vert");
-    shapeFrag_ = g_Render->GetShaderManager()->GetOrCreateShader("shape.frag");
+    shapeVert_ = g_Render->GetShaderManager()->GetOrCreateShader("Shape_vs.hlsl");
+    shapeFrag_ = g_Render->GetShaderManager()->GetOrCreateShader("Shape_fs.hlsl");
 
     if (!shapeVert_ || !shapeFrag_)
         return R_FAIL;
