@@ -1,5 +1,13 @@
+struct BindingUBO
+{
+    uint4 SRV[2]; // TODO use constant
+};
+
+#define BindingIdx(x) Bindings.SRV[x / 4][x % 4]
+
 SamplerState PointSampler : register(s0, space0);
 Texture2D AllTextures[] : register(t0, space1);
+ConstantBuffer<BindingUBO> Bindings : register(c0, space2);
 
 struct ps_in
 {
@@ -11,6 +19,7 @@ struct ps_in
 float4 main(ps_in input)
 {
     float4 outColor = float4(input.Color, 1);
-    outColor = outColor * AllTextures[0].Sample(PointSampler, input.UV);
+    outColor = outColor * AllTextures[BindingIdx(1)].Sample(PointSampler, input.UV);
+
     return outColor;
 }

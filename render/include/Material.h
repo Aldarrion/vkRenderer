@@ -10,6 +10,7 @@ namespace vkr
 class Texture;
 class Shader;
 class VertexBuffer;
+class DynamicUniformBuffer;
 
 //------------------------------------------------------------------------------
 class Material
@@ -30,7 +31,9 @@ public:
 private:
     Shader*     triangleVert_{};
     Shader*     triangleFrag_{};
-    Texture*    texture_;
+    Texture*    texture_{};
+    Texture*    textureTree_{};
+    Texture*    textureBox_{};
 };
 
 

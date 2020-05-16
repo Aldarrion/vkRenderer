@@ -4,6 +4,7 @@
 #include "Texture.h"
 #include "ShaderManager.h"
 #include "VertexBuffer.h"
+#include "DynamicUniformBuffer.h"
 
 #include "vkr_Shaderc.h"
 #include "vkr_Image.h"
@@ -15,16 +16,44 @@ namespace vkr
 //------------------------------------------------------------------------------
 RESULT TexturedTriangleMaterial::Init()
 {
-    int texWidth, texHeight, texChannels;
-    stbi_uc* pixels = stbi_load("textures/grass_tile.png", &texWidth, &texHeight, &texChannels, STBI_rgb_alpha);
+    {
+        int texWidth, texHeight, texChannels;
+        stbi_uc* pixels = stbi_load("textures/grass_tile.png", &texWidth, &texHeight, &texChannels, STBI_rgb_alpha);
 
-    texture_ = new Texture(VK_FORMAT_R8G8B8A8_UNORM, VkExtent3D{ (uint)texWidth, (uint)texHeight, 1 });
+        texture_ = new Texture(VK_FORMAT_R8G8B8A8_UNORM, VkExtent3D{ (uint)texWidth, (uint)texHeight, 1 });
 
-    auto texAllocRes = texture_->Allocate(pixels, "GrassTile");
-    stbi_image_free(pixels);
+        auto texAllocRes = texture_->Allocate(pixels, "GrassTile");
+        stbi_image_free(pixels);
     
-    if (FAILED(texAllocRes))
-        return R_FAIL;
+        if (FAILED(texAllocRes))
+            return R_FAIL; // TODO release resources
+    }
+
+    {
+        int texWidth, texHeight, texChannels;
+        stbi_uc* pixels = stbi_load("textures/tree.png", &texWidth, &texHeight, &texChannels, STBI_rgb_alpha);
+
+        textureTree_ = new Texture(VK_FORMAT_R8G8B8A8_UNORM, VkExtent3D{ (uint)texWidth, (uint)texHeight, 1 });
+
+        auto texAllocRes = textureTree_->Allocate(pixels, "Tree");
+        stbi_image_free(pixels);
+    
+        if (FAILED(texAllocRes))
+            return R_FAIL; // TODO release resources
+    }
+
+    {
+        int texWidth, texHeight, texChannels;
+        stbi_uc* pixels = stbi_load("textures/box.png", &texWidth, &texHeight, &texChannels, STBI_rgb_alpha);
+
+        textureBox_ = new Texture(VK_FORMAT_R8G8B8A8_UNORM, VkExtent3D{ (uint)texWidth, (uint)texHeight, 1 });
+
+        auto texAllocRes = textureBox_->Allocate(pixels, "Box");
+        stbi_image_free(pixels);
+    
+        if (FAILED(texAllocRes))
+            return R_FAIL; // TODO release resources
+    }
 
     triangleVert_ = g_Render->GetShaderManager()->GetOrCreateShader("Triangle_vs.hlsl");
     triangleFrag_ = g_Render->GetShaderManager()->GetOrCreateShader("Triangle_fs.hlsl");
@@ -41,6 +70,8 @@ void TexturedTriangleMaterial::Draw()
     g_Render->SetShader<PS_VERT>(triangleVert_);
     g_Render->SetShader<PS_FRAG>(triangleFrag_);
     g_Render->SetTexture(0, texture_);
+    g_Render->SetTexture(1, textureBox_);
+    g_Render->SetTexture(2, textureTree_);
     g_Render->Draw(3, 0);
 }
 
@@ -105,7 +136,7 @@ void ShapeMaterial::Draw()
     vertexInputInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
     vertexInputInfo.vertexBindingDescriptionCount = 1;
     vertexInputInfo.pVertexBindingDescriptions = &bindingDescription;
-    vertexInputInfo.vertexAttributeDescriptionCount = VKR_ARR_LEN(attributeDescriptions);
+    vertexInputInfo.vertexAttributeDescriptionCount = vkr_arr_len(attributeDescriptions);
     vertexInputInfo.pVertexAttributeDescriptions = attributeDescriptions;
 
 

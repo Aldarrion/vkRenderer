@@ -15,9 +15,6 @@ public:
 
     VkBuffer GetBuffer() const;
 
-    void* Map();
-    void* Unmap();
-
 private:
     VkBuffer buffer_;
     VmaAllocation allocation_;

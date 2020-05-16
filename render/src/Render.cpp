@@ -7,6 +7,7 @@
 #include "Texture.h"
 #include "ShaderManager.h"
 #include "VertexBuffer.h"
+#include "DynamicUniformBuffer.h"
 
 #include "vkr_Assert.h"
 #include "vkr_Vulkan.h"
@@ -110,6 +111,12 @@ bool CheckResult(VkResult result, const char* file, int line, const char* fun)
 namespace vkr
 {
 
+//------------------------------------------------------------------------------
+struct BindingUBO
+{
+    uint SRV[SRV_SLOT_COUNT]{};
+};
+
 #if VKR_DEBUG
     //------------------------------------------------------------------------------
     void QueueFamiliesToString(uint bits, char* str)
@@ -173,7 +180,7 @@ VkBool32 ValidationCallback(
     const char* msg,
     void* userData)
 {
-    for (uint i = 0; i < VKR_ARR_LEN(IGNORED_MSGS); ++i)
+    for (uint i = 0; i < vkr_arr_len(IGNORED_MSGS); ++i)
     {
         if (strstr(msg, IGNORED_MSGS[i]) != NULL)
             return VK_FALSE;
@@ -296,7 +303,7 @@ RESULT Render::InitWin32(HWND hwnd, HINSTANCE hinst)
             "VK_LAYER_LUNARG_standard_validation",
         };
 
-        instInfo.enabledLayerCount      = (uint)VKR_ARR_LEN(validationLayers);
+        instInfo.enabledLayerCount      = (uint)vkr_arr_len(validationLayers);
         instInfo.ppEnabledLayerNames    = validationLayers;
     #endif
 
@@ -307,7 +314,7 @@ RESULT Render::InitWin32(HWND hwnd, HINSTANCE hinst)
         VK_EXT_DEBUG_UTILS_EXTENSION_NAME,
     };
 
-    instInfo.enabledExtensionCount      = VKR_ARR_LEN(instanceExt);
+    instInfo.enabledExtensionCount      = vkr_arr_len(instanceExt);
     instInfo.ppEnabledExtensionNames    = instanceExt;
 
     if (VKR_FAILED(vkCreateInstance(&instInfo, nullptr, &vkInstance_)))
@@ -340,11 +347,13 @@ RESULT Render::InitWin32(HWND hwnd, HINSTANCE hinst)
     if (VKR_FAILED(vkEnumeratePhysicalDevices(vkInstance_, &physicalDeviceCount, physicalDevices)))
         return R_FAIL;
 
-    vkr_assert(physicalDeviceCount > 0 && physicalDeviceCount < VKR_ARR_LEN(physicalDevices));
+    vkr_assert(physicalDeviceCount > 0 && physicalDeviceCount < vkr_arr_len(physicalDevices));
 
     int bestDevice = 0;
     // TODO Actually find the best device and check capabilities here
     vkPhysicalDevice_ = physicalDevices[0];
+
+    vkGetPhysicalDeviceProperties(vkPhysicalDevice_, &vkPhysicalDeviceProperties_);
 
     //-----------------------
     // Queues
@@ -414,7 +423,7 @@ RESULT Render::InitWin32(HWND hwnd, HINSTANCE hinst)
     deviceInfo.pQueueCreateInfos        = queues;
     deviceInfo.enabledLayerCount        = instInfo.enabledLayerCount;
     deviceInfo.ppEnabledLayerNames      = instInfo.ppEnabledLayerNames;
-    deviceInfo.enabledExtensionCount    = VKR_ARR_LEN(deviceExt);
+    deviceInfo.enabledExtensionCount    = vkr_arr_len(deviceExt);
     deviceInfo.ppEnabledExtensionNames  = deviceExt;
     deviceInfo.pEnabledFeatures         = &deviceFeatures;
         
@@ -618,12 +627,13 @@ RESULT Render::InitWin32(HWND hwnd, HINSTANCE hinst)
 
     VkDescriptorSetLayoutCreateInfo dsLayoutInfo{};
     dsLayoutInfo.sType          = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-    dsLayoutInfo.bindingCount   = VKR_ARR_LEN(bindings);
+    dsLayoutInfo.bindingCount   = vkr_arr_len(bindings);
     dsLayoutInfo.pBindings      = bindings;
 
-    if (VKR_FAILED(vkCreateDescriptorSetLayout(vkDevice_, &dsLayoutInfo, nullptr, &fsSamplers_)))
+    if (VKR_FAILED(vkCreateDescriptorSetLayout(vkDevice_, &dsLayoutInfo, nullptr, &fsSamplerLayout_)))
         return R_FAIL;
 
+    // Bindless SRV
     VkDescriptorSetLayoutBinding srvBindings[1]{};
     srvBindings[0].binding             = 0;
     srvBindings[0].descriptorType      = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE;
@@ -640,19 +650,35 @@ RESULT Render::InitWin32(HWND hwnd, HINSTANCE hinst)
     bindlessSrv.sType           = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
     bindlessSrv.pNext           = &bindingFlagsInfo;
     bindlessSrv.flags           = VK_DESCRIPTOR_SET_LAYOUT_CREATE_UPDATE_AFTER_BIND_POOL_BIT_EXT;
-    bindlessSrv.bindingCount    = VKR_ARR_LEN(srvBindings);
+    bindlessSrv.bindingCount    = vkr_arr_len(srvBindings);
     bindlessSrv.pBindings       = srvBindings;
     
     if (VKR_FAILED(vkCreateDescriptorSetLayout(vkDevice_, &bindlessSrv, nullptr, &bindlessTexturesLayout_)))
         return R_FAIL;
 
+    // UBO
+    VkDescriptorSetLayoutBinding uboBindings[1]{};
+    uboBindings[0].binding             = 0;
+    uboBindings[0].descriptorType      = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC;
+    uboBindings[0].descriptorCount     = DYNAMIC_UBO_COUNT;
+    uboBindings[0].stageFlags          = VK_SHADER_STAGE_FRAGMENT_BIT | VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_COMPUTE_BIT;
+
+    VkDescriptorSetLayoutCreateInfo dynamicUbo{};
+    dynamicUbo.sType           = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+    dynamicUbo.bindingCount    = vkr_arr_len(uboBindings);
+    dynamicUbo.pBindings       = uboBindings;
+
+    if (VKR_FAILED(vkCreateDescriptorSetLayout(vkDevice_, &dynamicUbo, nullptr, &dynamicUBOLayout_)))
+        return R_FAIL;
+
     VkDescriptorSetLayout descLayouts[] = {
-        fsSamplers_,
-        bindlessTexturesLayout_
+        fsSamplerLayout_,
+        bindlessTexturesLayout_,
+        dynamicUBOLayout_,
     };
 
     VkPipelineLayoutCreateInfo plLayoutInfo{};
-    plLayoutInfo.setLayoutCount = VKR_ARR_LEN(descLayouts);
+    plLayoutInfo.setLayoutCount = vkr_arr_len(descLayouts);
     plLayoutInfo.pSetLayouts    = descLayouts;
 
     plLayoutInfo.sType          = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
@@ -661,61 +687,86 @@ RESULT Render::InitWin32(HWND hwnd, HINSTANCE hinst)
 
     //-----------------------
     // Descriptors
-    VkDescriptorPoolSize poolSizes[1]{};
-    poolSizes[0].type              = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE;
-    poolSizes[0].descriptorCount   = 500000;
+    {
+        VkDescriptorPoolSize poolSizes[1]{};
+        poolSizes[0].type              = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE;
+        poolSizes[0].descriptorCount   = 500000;
 
-    VkDescriptorPoolCreateInfo poolInfo{};
-    poolInfo.sType          = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
-    poolInfo.flags          = VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT | VK_DESCRIPTOR_POOL_CREATE_UPDATE_AFTER_BIND_BIT_EXT;
-    poolInfo.maxSets        = 1;
-    poolInfo.poolSizeCount  = VKR_ARR_LEN(poolSizes);
-    poolInfo.pPoolSizes     = poolSizes;
+        VkDescriptorPoolCreateInfo poolInfo{};
+        poolInfo.sType          = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
+        poolInfo.flags          = VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT | VK_DESCRIPTOR_POOL_CREATE_UPDATE_AFTER_BIND_BIT_EXT;
+        poolInfo.maxSets        = 1;
+        poolInfo.poolSizeCount  = vkr_arr_len(poolSizes);
+        poolInfo.pPoolSizes     = poolSizes;
     
-    if (VKR_FAILED(vkCreateDescriptorPool(vkDevice_, &poolInfo, nullptr, &bindlessPool_)))
-        return R_FAIL;
+        if (VKR_FAILED(vkCreateDescriptorPool(vkDevice_, &poolInfo, nullptr, &bindlessPool_)))
+            return R_FAIL;
 
-    VkDescriptorSetAllocateInfo dsAllocInfo{};
-    dsAllocInfo.sType               = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
-    dsAllocInfo.descriptorPool      = bindlessPool_;
-    dsAllocInfo.descriptorSetCount  = 1;
-    dsAllocInfo.pSetLayouts         = &bindlessTexturesLayout_;
+        VkDescriptorSetAllocateInfo dsAllocInfo{};
+        dsAllocInfo.sType               = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+        dsAllocInfo.descriptorPool      = bindlessPool_;
+        dsAllocInfo.descriptorSetCount  = 1;
+        dsAllocInfo.pSetLayouts         = &bindlessTexturesLayout_;
 
-    if (VKR_FAILED(vkAllocateDescriptorSets(vkDevice_, &dsAllocInfo, &bindlessSet_)))
-        return R_FAIL;
+        if (VKR_FAILED(vkAllocateDescriptorSets(vkDevice_, &dsAllocInfo, &bindlessSet_)))
+            return R_FAIL;
+    }
 
     // Static samplers
-    VkDescriptorPoolSize immutableSamplerSizes[1]{};
-    immutableSamplerSizes[0].type              = VK_DESCRIPTOR_TYPE_SAMPLER;
-    immutableSamplerSizes[0].descriptorCount   = 1;
+    {
+        VkDescriptorPoolSize immutableSamplerSizes[1]{};
+        immutableSamplerSizes[0].type              = VK_DESCRIPTOR_TYPE_SAMPLER;
+        immutableSamplerSizes[0].descriptorCount   = 1;
 
-    VkDescriptorPoolCreateInfo immutableSampler{};
-    immutableSampler.sType          = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
-    immutableSampler.maxSets        = 1;
-    immutableSampler.poolSizeCount  = VKR_ARR_LEN(immutableSamplerSizes);
-    immutableSampler.pPoolSizes     = immutableSamplerSizes;
+        VkDescriptorPoolCreateInfo immutableSampler{};
+        immutableSampler.sType          = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
+        immutableSampler.maxSets        = 1;
+        immutableSampler.poolSizeCount  = vkr_arr_len(immutableSamplerSizes);
+        immutableSampler.pPoolSizes     = immutableSamplerSizes;
     
-    if (VKR_FAILED(vkCreateDescriptorPool(vkDevice_, &immutableSampler, nullptr, &immutableSamplerPool_)))
-        return R_FAIL;
+        if (VKR_FAILED(vkCreateDescriptorPool(vkDevice_, &immutableSampler, nullptr, &immutableSamplerPool_)))
+            return R_FAIL;
 
-    VkDescriptorSetAllocateInfo immutSamplerAllocInfo{};
-    immutSamplerAllocInfo.sType               = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
-    immutSamplerAllocInfo.descriptorPool      = immutableSamplerPool_;
-    immutSamplerAllocInfo.descriptorSetCount  = 1;
-    immutSamplerAllocInfo.pSetLayouts         = &fsSamplers_;
+        VkDescriptorSetAllocateInfo immutSamplerAllocInfo{};
+        immutSamplerAllocInfo.sType               = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+        immutSamplerAllocInfo.descriptorPool      = immutableSamplerPool_;
+        immutSamplerAllocInfo.descriptorSetCount  = 1;
+        immutSamplerAllocInfo.pSetLayouts         = &fsSamplerLayout_;
 
-    if (VKR_FAILED(vkAllocateDescriptorSets(vkDevice_, &immutSamplerAllocInfo, &immutableSamplerSet_)))
-        return R_FAIL;
+        if (VKR_FAILED(vkAllocateDescriptorSets(vkDevice_, &immutSamplerAllocInfo, &immutableSamplerSet_)))
+            return R_FAIL;
+    }
+
+    // Dynamic UBO
+    {
+        VkDescriptorPoolSize dynUboSizes[1]{};
+        dynUboSizes[0].type              = VK_DESCRIPTOR_TYPE_SAMPLER;
+        dynUboSizes[0].descriptorCount   = DYNAMIC_UBO_COUNT;
+
+        VkDescriptorPoolCreateInfo dynamicUbo{};
+        dynamicUbo.sType          = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
+        dynamicUbo.maxSets        = 1024;
+        dynamicUbo.poolSizeCount  = vkr_arr_len(dynUboSizes);
+        dynamicUbo.pPoolSizes     = dynUboSizes;
+    
+        for (int i = 0; i < BB_IMG_COUNT; ++i)
+        {
+            if (VKR_FAILED(vkCreateDescriptorPool(vkDevice_, &dynamicUbo, nullptr, &dynamicUBODPool_[i])))
+                return R_FAIL;
+        }
+    }
 
     //-----------------------
     // Allocator
-    VmaAllocatorCreateInfo allocatorInfo{};
-    allocatorInfo.instance          = vkInstance_;
-    allocatorInfo.physicalDevice    = vkPhysicalDevice_;
-    allocatorInfo.device            = vkDevice_;
+    {
+        VmaAllocatorCreateInfo allocatorInfo{};
+        allocatorInfo.instance          = vkInstance_;
+        allocatorInfo.physicalDevice    = vkPhysicalDevice_;
+        allocatorInfo.device            = vkDevice_;
 
-    if (VKR_FAILED(vmaCreateAllocator(&allocatorInfo, &allocator_)))
-        return R_FAIL;
+        if (VKR_FAILED(vmaCreateAllocator(&allocatorInfo, &allocator_)))
+            return R_FAIL;
+    }
 
     //-----------------------
     // Init command buffer
@@ -733,7 +784,7 @@ RESULT Render::InitWin32(HWND hwnd, HINSTANCE hinst)
     //-----------------------
     // Material allocation
     materials_.Add(new TexturedTriangleMaterial());
-    materials_.Add(new ShapeMaterial());
+    //materials_.Add(new ShapeMaterial());
 
     for (int i = 0; i < materials_.Count(); ++i)
     {
@@ -871,48 +922,63 @@ RESULT Render::PrepareForDraw()
 
     //-------------------
     // Descriptors
-    if (state_.fsTextures_[0]) // Need descriptor set change
     {
-        /*VkDescriptorSetAllocateInfo dsAllocInfo{};
-        dsAllocInfo.sType               = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
-        dsAllocInfo.descriptorPool      = fsTexDescPools_[currentBBIdx_];
-        dsAllocInfo.descriptorSetCount  = 1;
-        dsAllocInfo.pSetLayouts         = &fsSamplers_;
+        uint minUboAlignment = (uint)g_Render->GetPhysDevProps().limits.minUniformBufferOffsetAlignment;
+        uint uboSize = sizeof(BindingUBO);
+        if (minUboAlignment > 0)
+            uboSize = (uboSize + minUboAlignment - 1) & ~(minUboAlignment - 1);
 
-        VkDescriptorSet fsTexDs;
-        if (VKR_FAILED(vkAllocateDescriptorSets(vkDevice_, &dsAllocInfo, &fsTexDs)))
-            return R_FAIL;
+        // TODO suballocate from cache
+        auto dynamicUBO = new DynamicUniformBuffer(uboSize);
+        if (FAILED(dynamicUBO->Init()))
+            return R_FAIL; // TODO release resources
+
+        auto ubo = (BindingUBO*)dynamicUBO->Map();
+        for (uint i = 0; i < SRV_SLOT_COUNT; ++i)
+        {
+            ubo->SRV[i] = state_.fsTextures_[i];
+        }
+        vkr_assert(ubo->SRV[0] == 0);
+        vkr_assert(ubo->SRV[1] == 2);
+        vkr_assert(ubo->SRV[2] == 1);
+        dynamicUBO->Unmap();
+
+        VkDescriptorSetAllocateInfo dsAllocInfo{};
+        dsAllocInfo.sType               = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+        dsAllocInfo.descriptorPool      = dynamicUBODPool_[currentBBIdx_];
+        dsAllocInfo.descriptorSetCount  = 1;
+        dsAllocInfo.pSetLayouts         = &dynamicUBOLayout_;
+
+        if (VKR_FAILED(vkAllocateDescriptorSets(vkDevice_, &dsAllocInfo, &state_.uboDescSet_)))
+            return R_FAIL; // TODO release resources
 
         // Copy descriptors
-        VkDescriptorImageInfo imgInfo[FRAG_TEX_COUNT]{};
-        imgInfo[0].imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-        imgInfo[0].imageView   = state_.fsTextures_[0]->GetView();
-        for (uint i = 1; i < FRAG_TEX_COUNT; ++i)
-        {
-            imgInfo[i].imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-            imgInfo[i].imageView   = state_.fsTextures_[0]->GetView();
-        }
+        VkDescriptorBufferInfo buffInfo[DYNAMIC_UBO_COUNT]{};
+        buffInfo[0].buffer = dynamicUBO->GetBuffer();
+        buffInfo[0].offset = 0;
+        buffInfo[0].range  = dynamicUBO->GetSize();
 
-        VkWriteDescriptorSet texWrite{};
-        texWrite.sType            = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-        texWrite.dstSet           = fsTexDs;
-        texWrite.dstBinding       = 0;
-        texWrite.dstArrayElement  = 0;
-        texWrite.descriptorCount  = FRAG_TEX_COUNT;
-        texWrite.descriptorType   = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE;
-        texWrite.pImageInfo       = imgInfo;
+        VkWriteDescriptorSet UBOWrite{};
+        UBOWrite.sType              = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+        UBOWrite.dstSet             = state_.uboDescSet_;
+        UBOWrite.dstBinding         = 0;
+        UBOWrite.dstArrayElement    = 0;
+        UBOWrite.descriptorCount    = DYNAMIC_UBO_COUNT;
+        UBOWrite.descriptorType     = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC;
+        UBOWrite.pBufferInfo        = buffInfo;
 
-        vkUpdateDescriptorSets(vkDevice_, 1, &texWrite, 0, nullptr);
-
-        vkCmdBindDescriptorSets(CmdBuff(), VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout_, 0, 1, &fsTexDs, 0, nullptr);*/
+        vkUpdateDescriptorSets(vkDevice_, 1, &UBOWrite, 0, nullptr);
     }
 
     VkDescriptorSet descSets[] = {
         immutableSamplerSet_,
         bindlessSet_,
+        state_.uboDescSet_,
     };
 
-    vkCmdBindDescriptorSets(CmdBuff(), VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout_, 0, VKR_ARR_LEN(descSets), descSets, 0, nullptr);
+    uint dynOffsets[DYNAMIC_UBO_COUNT]{};
+
+    vkCmdBindDescriptorSets(CmdBuff(), VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout_, 0, vkr_arr_len(descSets), descSets, vkr_arr_len(dynOffsets), dynOffsets);
 
     // Vertex buffers
     if (state_.vertexBuffers_[0])
@@ -994,7 +1060,7 @@ void Render::Update()
         VkAttachmentDescription attachments[1] = { colorAttachment };
         VkRenderPassCreateInfo renderPassInfo{};
         renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
-        renderPassInfo.attachmentCount = VKR_ARR_LEN(attachments);
+        renderPassInfo.attachmentCount = vkr_arr_len(attachments);
         renderPassInfo.pAttachments = attachments;
         renderPassInfo.subpassCount = 1;
         renderPassInfo.pSubpasses = &subpass;
@@ -1072,6 +1138,9 @@ void Render::Update()
     WaitForFence(nextImageFence_);
     WaitForFence(directQueueFences_[currentBBIdx_]);
 
+    vkResetDescriptorPool(vkDevice_, dynamicUBODPool_[currentBBIdx_], 0);
+    // TODO reset command pool for this currentBBIdx_
+
     VkCommandBufferBeginInfo beginInfo{};
     beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
     beginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
@@ -1106,6 +1175,12 @@ VkCommandBuffer Render::CmdBuff() const
 }
 
 //------------------------------------------------------------------------------
+const VkPhysicalDeviceProperties& Render::GetPhysDevProps() const
+{
+    return vkPhysicalDeviceProperties_;
+}
+
+//------------------------------------------------------------------------------
 void Render::SetTexture(uint slot, Texture* texture)
 {
     uint texIdx = texture->GetBindlessIndex();
@@ -1129,6 +1204,14 @@ void Render::SetVertexBuffer(uint slot, VertexBuffer* buffer, uint offset)
 void Render::SetVertexLayout(uint slot, VkPipelineVertexInputStateCreateInfo* layout)
 {
     state_.vertexLayouts_[slot] = layout;
+}
+
+//------------------------------------------------------------------------------
+void Render::SetDynamicUbo(uint slot, DynamicUBOEntry* entry)
+{
+    vkr_assert(slot < DYNAMIC_UBO_COUNT);
+
+    state_.dynamicUBOs_[slot] = entry;
 }
 
 //------------------------------------------------------------------------------
@@ -1158,8 +1241,11 @@ void RenderState::Reset()
     for (int i = 0; i < PS_COUNT; ++i)
         shaders_[i] = {};
 
-    for (uint i = 0; i < FRAG_TEX_COUNT; ++i)
-        fsTextures_[i] = (uint)-1;
+    for (uint i = 0; i < SRV_SLOT_COUNT; ++i)
+        fsTextures_[i] = RenderState::INVALID_DESC;
+
+    for (int i = 0; i < DYNAMIC_UBO_COUNT; ++i)
+        dynamicUBOs_[i] = {};
 
     fsDirtyTextures_ = 0;
 
