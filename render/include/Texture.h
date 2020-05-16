@@ -2,6 +2,7 @@
 
 #include "VkTypes.h"
 #include "Enums.h"
+#include "Types.h"
 
 namespace vkr
 {
@@ -15,6 +16,7 @@ public:
     void Free();
 
     VkImageView GetView() const;
+    uint GetBindlessIndex() const;
 
 private:
     VkImage         image_;
@@ -23,6 +25,7 @@ private:
     VkExtent3D      size_;
 
     VkImageView     srv_;
+    uint            bindlessIdx_;
 };
 
 }

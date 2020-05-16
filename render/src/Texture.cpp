@@ -22,6 +22,12 @@ VkImageView Texture::GetView() const
 }
 
 //------------------------------------------------------------------------------
+uint Texture::GetBindlessIndex() const
+{
+    return bindlessIdx_;
+}
+
+//------------------------------------------------------------------------------
 RESULT Texture::Allocate(void* data, const char* diagName)
 {
     VkImageLayout initLayout = VK_IMAGE_LAYOUT_UNDEFINED;
@@ -105,6 +111,8 @@ RESULT Texture::Allocate(void* data, const char* diagName)
     imgViewInfo.subresourceRange    = subres;
 
     vkCreateImageView(g_Render->GetDevice(), &imgViewInfo, nullptr, &srv_);
+
+    bindlessIdx_ = g_Render->AddBindlessTexture(srv_);
 
     return R_OK;
 }

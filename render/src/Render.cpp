@@ -155,6 +155,14 @@ RESULT CreateRender(uint width, uint height)
 }
 
 //------------------------------------------------------------------------------
+constexpr const char* IGNORED_MSGS[] = {
+    "UNASSIGNED-BestPractices-vkCreateDevice-deprecated-extension",
+};
+
+//------------------------------------------------------------------------------
+constexpr const char* VALIDATION_WARNING = "Validation Warning:";
+
+//------------------------------------------------------------------------------
 VkBool32 ValidationCallback(
     VkDebugReportFlagsEXT flags,
     VkDebugReportObjectTypeEXT objType,
@@ -165,7 +173,17 @@ VkBool32 ValidationCallback(
     const char* msg,
     void* userData)
 {
-    Log(LogLevel::Error, "%s: %s", layerPrefix, msg);
+    for (uint i = 0; i < VKR_ARR_LEN(IGNORED_MSGS); ++i)
+    {
+        if (strstr(msg, IGNORED_MSGS[i]) != NULL)
+            return VK_FALSE;
+    }
+
+    auto logLevel = LogLevel::Error;
+    if (strncmp(msg, VALIDATION_WARNING, strlen(VALIDATION_WARNING)))
+        logLevel = LogLevel::Warning;
+
+    Log(logLevel, "%s", msg);
 
     // Return true only when we want to test the VL themselves
     return VK_FALSE;
@@ -257,8 +275,8 @@ RESULT Render::InitWin32(HWND hwnd, HINSTANCE hinst)
 
     if (apiVersion < VK_VERSION)
     {
-        Log(LogLevel::Error, "Vulkan version too low, %d, expected %d", apiVersion, VK_VERSION);
-        return R_FAIL;
+        //Log(LogLevel::Error, "Vulkan version too low, %d, expected %d", apiVersion, VK_VERSION);
+        //return R_FAIL;
     }
 
     VkApplicationInfo appInfo{};
@@ -380,10 +398,18 @@ RESULT Render::InitWin32(HWND hwnd, HINSTANCE hinst)
 
     const char* deviceExt[] = {
         VK_KHR_SWAPCHAIN_EXTENSION_NAME,
+        VK_EXT_DESCRIPTOR_INDEXING_EXTENSION_NAME
     };
+
+    VkPhysicalDeviceDescriptorIndexingFeatures indexingFeatures{};
+    indexingFeatures.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_INDEXING_FEATURES;
+    indexingFeatures.descriptorBindingSampledImageUpdateAfterBind   = VK_TRUE;
+    indexingFeatures.descriptorBindingPartiallyBound                = VK_TRUE;
+    indexingFeatures.descriptorBindingVariableDescriptorCount       = VK_TRUE;
 
     VkDeviceCreateInfo deviceInfo{};
     deviceInfo.sType                    = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
+    deviceInfo.pNext                    = &indexingFeatures;
     deviceInfo.queueCreateInfoCount     = 1;
     deviceInfo.pQueueCreateInfos        = queues;
     deviceInfo.enabledLayerCount        = instInfo.enabledLayerCount;
@@ -583,29 +609,51 @@ RESULT Render::InitWin32(HWND hwnd, HINSTANCE hinst)
         pointClamp
     };
 
-    VkDescriptorSetLayoutBinding bindings[2]{};
+    VkDescriptorSetLayoutBinding bindings[1]{};
     bindings[0].binding             = 0;
-    bindings[0].descriptorType      = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE;
-    bindings[0].descriptorCount     = FRAG_TEX_COUNT;
+    bindings[0].descriptorType      = VK_DESCRIPTOR_TYPE_SAMPLER;
+    bindings[0].descriptorCount     = IMMUTABLE_SAMPLER_COUNT;
     bindings[0].stageFlags          = VK_SHADER_STAGE_FRAGMENT_BIT;
-
-    bindings[1].binding             = 1;
-    bindings[1].descriptorType      = VK_DESCRIPTOR_TYPE_SAMPLER;
-    bindings[1].descriptorCount     = IMMUTABLE_SAMPLER_COUNT;
-    bindings[1].stageFlags          = VK_SHADER_STAGE_FRAGMENT_BIT;
-    bindings[1].pImmutableSamplers  = samplers;
+    bindings[0].pImmutableSamplers  = samplers;
 
     VkDescriptorSetLayoutCreateInfo dsLayoutInfo{};
     dsLayoutInfo.sType          = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
     dsLayoutInfo.bindingCount   = VKR_ARR_LEN(bindings);
     dsLayoutInfo.pBindings      = bindings;
 
-    if (VKR_FAILED(vkCreateDescriptorSetLayout(vkDevice_, &dsLayoutInfo, nullptr, &fsTexLayout_)))
+    if (VKR_FAILED(vkCreateDescriptorSetLayout(vkDevice_, &dsLayoutInfo, nullptr, &fsSamplers_)))
         return R_FAIL;
 
+    VkDescriptorSetLayoutBinding srvBindings[1]{};
+    srvBindings[0].binding             = 0;
+    srvBindings[0].descriptorType      = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE;
+    srvBindings[0].descriptorCount     = 500000; // Minimum limit
+    srvBindings[0].stageFlags          = VK_SHADER_STAGE_FRAGMENT_BIT | VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_COMPUTE_BIT;
+
+    VkDescriptorBindingFlags bindingFlags = VK_DESCRIPTOR_BINDING_UPDATE_AFTER_BIND_BIT | VK_DESCRIPTOR_BINDING_VARIABLE_DESCRIPTOR_COUNT_BIT | VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT;
+    VkDescriptorSetLayoutBindingFlagsCreateInfo bindingFlagsInfo{};
+    bindingFlagsInfo.sType          = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_BINDING_FLAGS_CREATE_INFO;
+    bindingFlagsInfo.bindingCount   = 1;
+    bindingFlagsInfo.pBindingFlags  = &bindingFlags;
+
+    VkDescriptorSetLayoutCreateInfo bindlessSrv{};
+    bindlessSrv.sType           = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+    bindlessSrv.pNext           = &bindingFlagsInfo;
+    bindlessSrv.flags           = VK_DESCRIPTOR_SET_LAYOUT_CREATE_UPDATE_AFTER_BIND_POOL_BIT_EXT;
+    bindlessSrv.bindingCount    = VKR_ARR_LEN(srvBindings);
+    bindlessSrv.pBindings       = srvBindings;
+    
+    if (VKR_FAILED(vkCreateDescriptorSetLayout(vkDevice_, &bindlessSrv, nullptr, &bindlessTexturesLayout_)))
+        return R_FAIL;
+
+    VkDescriptorSetLayout descLayouts[] = {
+        fsSamplers_,
+        bindlessTexturesLayout_
+    };
+
     VkPipelineLayoutCreateInfo plLayoutInfo{};
-    plLayoutInfo.setLayoutCount = 1;
-    plLayoutInfo.pSetLayouts    = &fsTexLayout_;
+    plLayoutInfo.setLayoutCount = VKR_ARR_LEN(descLayouts);
+    plLayoutInfo.pSetLayouts    = descLayouts;
 
     plLayoutInfo.sType          = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
     if (VKR_FAILED(vkCreatePipelineLayout(vkDevice_, &plLayoutInfo, nullptr, &pipelineLayout_)))
@@ -615,19 +663,49 @@ RESULT Render::InitWin32(HWND hwnd, HINSTANCE hinst)
     // Descriptors
     VkDescriptorPoolSize poolSizes[1]{};
     poolSizes[0].type              = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE;
-    poolSizes[0].descriptorCount   = FRAG_TEX_COUNT;
+    poolSizes[0].descriptorCount   = 500000;
 
     VkDescriptorPoolCreateInfo poolInfo{};
     poolInfo.sType          = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
-    poolInfo.maxSets        = 128;
+    poolInfo.flags          = VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT | VK_DESCRIPTOR_POOL_CREATE_UPDATE_AFTER_BIND_BIT_EXT;
+    poolInfo.maxSets        = 1;
     poolInfo.poolSizeCount  = VKR_ARR_LEN(poolSizes);
     poolInfo.pPoolSizes     = poolSizes;
     
-    for (uint i = 0; i < VKR_ARR_LEN(fsTexDescPools_); ++i)
-    {
-        if (VKR_FAILED(vkCreateDescriptorPool(vkDevice_, &poolInfo, nullptr, &fsTexDescPools_[i])))
-            return R_FAIL;
-    }
+    if (VKR_FAILED(vkCreateDescriptorPool(vkDevice_, &poolInfo, nullptr, &bindlessPool_)))
+        return R_FAIL;
+
+    VkDescriptorSetAllocateInfo dsAllocInfo{};
+    dsAllocInfo.sType               = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+    dsAllocInfo.descriptorPool      = bindlessPool_;
+    dsAllocInfo.descriptorSetCount  = 1;
+    dsAllocInfo.pSetLayouts         = &bindlessTexturesLayout_;
+
+    if (VKR_FAILED(vkAllocateDescriptorSets(vkDevice_, &dsAllocInfo, &bindlessSet_)))
+        return R_FAIL;
+
+    // Static samplers
+    VkDescriptorPoolSize immutableSamplerSizes[1]{};
+    immutableSamplerSizes[0].type              = VK_DESCRIPTOR_TYPE_SAMPLER;
+    immutableSamplerSizes[0].descriptorCount   = 1;
+
+    VkDescriptorPoolCreateInfo immutableSampler{};
+    immutableSampler.sType          = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
+    immutableSampler.maxSets        = 1;
+    immutableSampler.poolSizeCount  = VKR_ARR_LEN(immutableSamplerSizes);
+    immutableSampler.pPoolSizes     = immutableSamplerSizes;
+    
+    if (VKR_FAILED(vkCreateDescriptorPool(vkDevice_, &immutableSampler, nullptr, &immutableSamplerPool_)))
+        return R_FAIL;
+
+    VkDescriptorSetAllocateInfo immutSamplerAllocInfo{};
+    immutSamplerAllocInfo.sType               = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+    immutSamplerAllocInfo.descriptorPool      = immutableSamplerPool_;
+    immutSamplerAllocInfo.descriptorSetCount  = 1;
+    immutSamplerAllocInfo.pSetLayouts         = &fsSamplers_;
+
+    if (VKR_FAILED(vkAllocateDescriptorSets(vkDevice_, &immutSamplerAllocInfo, &immutableSamplerSet_)))
+        return R_FAIL;
 
     //-----------------------
     // Allocator
@@ -795,11 +873,11 @@ RESULT Render::PrepareForDraw()
     // Descriptors
     if (state_.fsTextures_[0]) // Need descriptor set change
     {
-        VkDescriptorSetAllocateInfo dsAllocInfo{};
+        /*VkDescriptorSetAllocateInfo dsAllocInfo{};
         dsAllocInfo.sType               = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
         dsAllocInfo.descriptorPool      = fsTexDescPools_[currentBBIdx_];
         dsAllocInfo.descriptorSetCount  = 1;
-        dsAllocInfo.pSetLayouts         = &fsTexLayout_;
+        dsAllocInfo.pSetLayouts         = &fsSamplers_;
 
         VkDescriptorSet fsTexDs;
         if (VKR_FAILED(vkAllocateDescriptorSets(vkDevice_, &dsAllocInfo, &fsTexDs)))
@@ -815,22 +893,28 @@ RESULT Render::PrepareForDraw()
             imgInfo[i].imageView   = state_.fsTextures_[0]->GetView();
         }
 
-        VkWriteDescriptorSet fsTexWrite{};
-        fsTexWrite.sType            = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-        fsTexWrite.dstSet           = fsTexDs;
-        fsTexWrite.dstBinding       = 0;
-        fsTexWrite.dstArrayElement  = 0;
-        fsTexWrite.descriptorCount  = FRAG_TEX_COUNT;
-        fsTexWrite.descriptorType   = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE;
-        fsTexWrite.pImageInfo       = imgInfo;
+        VkWriteDescriptorSet texWrite{};
+        texWrite.sType            = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+        texWrite.dstSet           = fsTexDs;
+        texWrite.dstBinding       = 0;
+        texWrite.dstArrayElement  = 0;
+        texWrite.descriptorCount  = FRAG_TEX_COUNT;
+        texWrite.descriptorType   = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE;
+        texWrite.pImageInfo       = imgInfo;
 
-        vkUpdateDescriptorSets(vkDevice_, 1, &fsTexWrite, 0, nullptr);
+        vkUpdateDescriptorSets(vkDevice_, 1, &texWrite, 0, nullptr);
 
-        vkCmdBindDescriptorSets(CmdBuff(), VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout_, 0, 1, &fsTexDs, 0, nullptr);
+        vkCmdBindDescriptorSets(CmdBuff(), VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout_, 0, 1, &fsTexDs, 0, nullptr);*/
     }
 
-    // Vertex buffers
+    VkDescriptorSet descSets[] = {
+        immutableSamplerSet_,
+        bindlessSet_,
+    };
 
+    vkCmdBindDescriptorSets(CmdBuff(), VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout_, 0, VKR_ARR_LEN(descSets), descSets, 0, nullptr);
+
+    // Vertex buffers
     if (state_.vertexBuffers_[0])
     {
         vkCmdBindVertexBuffers(CmdBuff(), 0, RenderState::MAX_VERT_BUFF, state_.vertexBuffers_, state_.vbOffsets_);
@@ -994,8 +1078,6 @@ void Render::Update()
 
     VKR_CHECK(vkBeginCommandBuffer(directCmdBuffers_[currentBBIdx_], &beginInfo));
 
-    VKR_CHECK(vkResetDescriptorPool(vkDevice_, fsTexDescPools_[currentBBIdx_], 0));
-
     ++m_iFrame;
 }
 
@@ -1026,10 +1108,11 @@ VkCommandBuffer Render::CmdBuff() const
 //------------------------------------------------------------------------------
 void Render::SetTexture(uint slot, Texture* texture)
 {
-    if (state_.fsTextures_[slot] == texture)
+    uint texIdx = texture->GetBindlessIndex();
+    if (state_.fsTextures_[slot] == texIdx)
         return;
 
-    state_.fsTextures_[slot] = texture;
+    state_.fsTextures_[slot] = texIdx;
     state_.fsDirtyTextures_ |= (uint64) 1 << slot;
 }
 
@@ -1049,13 +1132,34 @@ void Render::SetVertexLayout(uint slot, VkPipelineVertexInputStateCreateInfo* la
 }
 
 //------------------------------------------------------------------------------
+uint Render::AddBindlessTexture(VkImageView view)
+{
+    VkDescriptorImageInfo imgInfo{};
+    imgInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+    imgInfo.imageView   = view;
+
+    VkWriteDescriptorSet texWrite{};
+    texWrite.sType            = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+    texWrite.dstSet           = bindlessSet_;
+    texWrite.dstBinding       = 0;
+    texWrite.dstArrayElement  = lastFreeBindlessIndex_++;
+    texWrite.descriptorCount  = 1;
+    texWrite.descriptorType   = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE;
+    texWrite.pImageInfo       = &imgInfo;
+
+    vkUpdateDescriptorSets(vkDevice_, 1, &texWrite, 0, nullptr);
+
+    return texWrite.dstArrayElement;
+}
+
+//------------------------------------------------------------------------------
 void RenderState::Reset()
 {
     for (int i = 0; i < PS_COUNT; ++i)
         shaders_[i] = {};
 
     for (uint i = 0; i < FRAG_TEX_COUNT; ++i)
-        fsTextures_[i] = {};
+        fsTextures_[i] = (uint)-1;
 
     fsDirtyTextures_ = 0;
 

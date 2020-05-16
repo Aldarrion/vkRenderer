@@ -49,7 +49,7 @@ struct RenderState
     static constexpr uint MAX_VERT_BUFF = 1;
 
     Shader*         shaders_[PS_COUNT]{};
-    Texture*        fsTextures_[FRAG_TEX_COUNT]{};
+    uint            fsTextures_[FRAG_TEX_COUNT]{};
 
     uint64          fsDirtyTextures_{};
 
@@ -97,6 +97,8 @@ public:
         VkImageLayout layoutBefore, VkImageLayout layoutAfter,
         VkPipelineStageFlags stageBefore, VkPipelineStageFlags stageAfter
     );
+
+    uint AddBindlessTexture(VkImageView view);
 
 private:
     static constexpr auto VK_VERSION = VK_API_VERSION_1_1;
@@ -150,7 +152,12 @@ private:
     VkRenderPass        renderPass_[BB_IMG_COUNT]{};
 
     // Descriptors
-    VkDescriptorPool    fsTexDescPools_[BB_IMG_COUNT]{};
+    VkDescriptorPool    bindlessPool_{};
+    VkDescriptorSet     bindlessSet_{};
+    uint                lastFreeBindlessIndex_{};
+
+    VkDescriptorPool    immutableSamplerPool_{};
+    VkDescriptorSet     immutableSamplerSet_{};
 
     // Allocator
     VmaAllocator allocator_;
@@ -159,7 +166,8 @@ private:
 
     // Shaders
     ShaderManager*          shaderManager_{};
-    VkDescriptorSetLayout   fsTexLayout_{};
+    VkDescriptorSetLayout   fsSamplers_{};
+    VkDescriptorSetLayout   bindlessTexturesLayout_{};
     VkPipelineLayout        pipelineLayout_{};
 
     RenderState state_;
