@@ -171,6 +171,7 @@ private:
     VkCommandBuffer     directCmdBuffers_[BB_IMG_COUNT]{};
 
     VkRenderPass        renderPass_[BB_IMG_COUNT]{};
+    VkFramebuffer       frameBuffer_[BB_IMG_COUNT]{};
 
     // Descriptors
     VkDescriptorPool    bindlessPool_{};

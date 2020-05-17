@@ -1095,9 +1095,7 @@ void Render::Update()
         VKR_CHECK(vkCreateRenderPass(vkDevice_, &renderPassInfo, nullptr, &renderPass));
 
         if (renderPass_[currentBBIdx_])
-        {
             vkDestroyRenderPass(vkDevice_, renderPass_[currentBBIdx_], nullptr);
-        }
         renderPass_[currentBBIdx_] = renderPass;
     }
 
@@ -1115,6 +1113,10 @@ void Render::Update()
         framebufferInfo.layers          = 1;
         
         VKR_CHECK(vkCreateFramebuffer(vkDevice_, &framebufferInfo, nullptr, &frameBuffer));
+        
+        if (frameBuffer_[currentBBIdx_])
+            vkDestroyFramebuffer(vkDevice_, frameBuffer_[currentBBIdx_], nullptr);
+        frameBuffer_[currentBBIdx_] = frameBuffer;
     }
 
     VkClearValue clearVal{ VkClearColorValue { 0.2f, 0.6f, 0.2f, 1.0f } };
@@ -1164,7 +1166,6 @@ void Render::Update()
     WaitForFence(directQueueFences_[currentBBIdx_]);
 
     vkResetDescriptorPool(vkDevice_, dynamicUBODPool_[currentBBIdx_], 0);
-    // TODO reset command pool for this currentBBIdx_
 
     // Reset kept alive objects
     for (int i = 0; i < destroyPipelines_[currentBBIdx_].Count(); ++i)
