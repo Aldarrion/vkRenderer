@@ -769,6 +769,12 @@ RESULT Render::InitWin32(HWND hwnd, HINSTANCE hinst)
     }
 
     //-----------------------
+    // UBO cache
+    uboCache_ = new DynamicUBOCache();
+    if (FAILED(uboCache_->Init()))
+        return R_FAIL;
+
+    //-----------------------
     // Init command buffer
     VkCommandBufferBeginInfo beginInfo{};
     beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
@@ -922,26 +928,17 @@ RESULT Render::PrepareForDraw()
 
     //-------------------
     // Descriptors
+    if (state_.fsDirtyTextures_)
     {
-        uint minUboAlignment = (uint)g_Render->GetPhysDevProps().limits.minUniformBufferOffsetAlignment;
-        uint uboSize = sizeof(BindingUBO);
-        if (minUboAlignment > 0)
-            uboSize = (uboSize + minUboAlignment - 1) & ~(minUboAlignment - 1);
-
-        // TODO suballocate from cache
-        auto dynamicUBO = new DynamicUniformBuffer(uboSize);
-        if (FAILED(dynamicUBO->Init()))
-            return R_FAIL; // TODO release resources
-
-        auto ubo = (BindingUBO*)dynamicUBO->Map();
+        void* mapped;
+        state_.bindlessUBO_ = uboCache_->BeginAlloc(sizeof(BindingUBO), &mapped);
+        
+        auto ubo = (BindingUBO*)mapped;
         for (uint i = 0; i < SRV_SLOT_COUNT; ++i)
         {
             ubo->SRV[i] = state_.fsTextures_[i];
         }
-        vkr_assert(ubo->SRV[0] == 0);
-        vkr_assert(ubo->SRV[1] == 2);
-        vkr_assert(ubo->SRV[2] == 1);
-        dynamicUBO->Unmap();
+        uboCache_->EndAlloc();
 
         VkDescriptorSetAllocateInfo dsAllocInfo{};
         dsAllocInfo.sType               = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
@@ -950,13 +947,13 @@ RESULT Render::PrepareForDraw()
         dsAllocInfo.pSetLayouts         = &dynamicUBOLayout_;
 
         if (VKR_FAILED(vkAllocateDescriptorSets(vkDevice_, &dsAllocInfo, &state_.uboDescSet_)))
-            return R_FAIL; // TODO release resources
+            return R_FAIL;
 
         // Copy descriptors
         VkDescriptorBufferInfo buffInfo[DYNAMIC_UBO_COUNT]{};
-        buffInfo[0].buffer = dynamicUBO->GetBuffer();
+        buffInfo[0].buffer = state_.bindlessUBO_.buffer_;
         buffInfo[0].offset = 0;
-        buffInfo[0].range  = dynamicUBO->GetSize();
+        buffInfo[0].range  = state_.bindlessUBO_.size_;
 
         VkWriteDescriptorSet UBOWrite{};
         UBOWrite.sType              = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
@@ -977,6 +974,7 @@ RESULT Render::PrepareForDraw()
     };
 
     uint dynOffsets[DYNAMIC_UBO_COUNT]{};
+    dynOffsets[0] = state_.bindlessUBO_.dynOffset_;
 
     vkCmdBindDescriptorSets(CmdBuff(), VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout_, 0, vkr_arr_len(descSets), descSets, vkr_arr_len(dynOffsets), dynOffsets);
 
@@ -1147,7 +1145,7 @@ void Render::Update()
 
     VKR_CHECK(vkBeginCommandBuffer(directCmdBuffers_[currentBBIdx_], &beginInfo));
 
-    ++m_iFrame;
+    ++frame_;
 }
 
 //------------------------------------------------------------------------------
@@ -1172,6 +1170,18 @@ ShaderManager* Render::GetShaderManager() const
 VkCommandBuffer Render::CmdBuff() const
 {
     return directCmdBuffers_[currentBBIdx_];
+}
+
+//------------------------------------------------------------------------------
+uint64 Render::GetCurrentFrame() const
+{
+    return frame_;
+}
+
+//------------------------------------------------------------------------------
+uint64 Render::GetSafeFrame() const
+{
+    return frame_ + 2;
 }
 
 //------------------------------------------------------------------------------

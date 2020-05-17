@@ -1,7 +1,10 @@
 #pragma once
 
 #include "Config.h"
-#include "enums.h"
+
+#include "DynamicUniformBufferEntry.h"
+
+#include "Enums.h"
 #include "Types.h"
 #include "Array.h"
 #include "VkTypes.h"
@@ -43,6 +46,7 @@ class Material;
 class Texture;
 class ShaderManager;
 class VertexBuffer;
+class DynamicUBOCache;
 struct DynamicUBOEntry;
 
 //------------------------------------------------------------------------------
@@ -54,6 +58,8 @@ struct RenderState
     Shader*             shaders_[PS_COUNT]{};
     uint                fsTextures_[SRV_SLOT_COUNT]{};
     DynamicUBOEntry*    dynamicUBOs_[DYNAMIC_UBO_COUNT]{};
+    
+    DynamicUBOEntry     bindlessUBO_{};
 
     uint64              fsDirtyTextures_{};
 
@@ -93,10 +99,11 @@ public:
 
     VkDevice GetDevice() const;
     VmaAllocator GetAllocator() const;
-
-    VkCommandBuffer CmdBuff() const;
-
     ShaderManager* GetShaderManager() const;
+    VkCommandBuffer CmdBuff() const;
+    uint64 GetCurrentFrame() const;
+    uint64 GetSafeFrame() const;
+
 
     void TransitionBarrier(
         VkImage img, VkImageSubresourceRange subresource,
@@ -141,7 +148,7 @@ private:
     VkImageView         bbViews_[BB_IMG_COUNT]{};
     VkFormat            swapChainFormat_{};
 
-    uint64              m_iFrame{};
+    uint64              frame_{};
 
     // Synchronization
     #if defined(VKR_USE_TIMELINE_SEMAPHORES)
@@ -171,6 +178,9 @@ private:
     VkDescriptorSet     immutableSamplerSet_{};
 
     VkDescriptorPool    dynamicUBODPool_[BB_IMG_COUNT]{};
+
+    // UBO cache
+    DynamicUBOCache*    uboCache_;
 
     // Allocator
     VmaAllocator allocator_;

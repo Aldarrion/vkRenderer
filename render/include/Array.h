@@ -113,6 +113,13 @@ public:
         count_ = 0;
     }
 
+    //------------------------------------------------------------------------------
+    const T& Last()
+    {
+        vkr_assert(count_);
+        return items_[count_ - 1];
+    }
+
 private:
     static constexpr size_t MIN_CAPACITY = 8;
 
