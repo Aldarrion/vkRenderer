@@ -31,10 +31,12 @@ private:
     
     Array<VkShaderModule>       toDestroy_;
     shaderc_compiler*           shadercCompiler_{};
-    shaderc_compile_options*    opts_;
+    shaderc_compile_options*    opts_{};
+
+    uint16 shaderId_[PS_COUNT]{};
 
     RESULT CompileShader(const char* file, PipelineStage type, Shader& shader) const;
-    RESULT CreateShader(const char* name, Shader* shader) const;
+    RESULT CreateShader(const char* name, Shader* shader);
 };
 
 }

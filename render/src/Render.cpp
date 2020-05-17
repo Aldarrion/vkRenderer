@@ -201,7 +201,10 @@ RESULT Render::ReloadShaders()
 {
     vkr_assert(shaderManager_);
 
-    // TODO invalidate PSO cache
+    for (auto pl : pipelineCache_)
+        destroyPipelines_[currentBBIdx_].Add(pl.second);
+
+    pipelineCache_.clear();
 
     return shaderManager_->ReloadShaders();
 }
@@ -805,6 +808,19 @@ RESULT Render::InitWin32(HWND hwnd, HINSTANCE hinst)
 }
 
 //------------------------------------------------------------------------------
+Render::PipelineKey Render::StateToPipelineKey(const RenderState& state)
+{
+    PipelineKey key{};
+
+    if (state.shaders_[PS_VERT])
+        key |= state.shaders_[PS_VERT]->id_;   // 16 bit
+    if (state.shaders_[PS_FRAG])
+        key |= state.shaders_[PS_FRAG]->id_ << 16; // 16 bit
+
+    return key;
+}
+
+//------------------------------------------------------------------------------
 RESULT Render::PrepareForDraw()
 {
     #pragma region Pipeline
@@ -817,7 +833,7 @@ RESULT Render::PrepareForDraw()
         ++numStages;
         stages[0].sType     = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
         stages[0].stage     = VK_SHADER_STAGE_VERTEX_BIT;
-        stages[0].module    = state_.shaders_[PS_VERT]->vkShader;
+        stages[0].module    = state_.shaders_[PS_VERT]->vkShader_;
         stages[0].pName     = "main";
     }
     
@@ -826,7 +842,7 @@ RESULT Render::PrepareForDraw()
         ++numStages;
         stages[1].sType     = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
         stages[1].stage     = VK_SHADER_STAGE_FRAGMENT_BIT;
-        stages[1].module    = state_.shaders_[PS_FRAG]->vkShader;
+        stages[1].module    = state_.shaders_[PS_FRAG]->vkShader_;
         stages[1].pName     = "main";
     }
 
@@ -899,7 +915,6 @@ RESULT Render::PrepareForDraw()
         colorBlending.pAttachments      = &colorBlendAttachment;
     }
 
-    VkPipeline pipeline{};
     VkGraphicsPipelineCreateInfo plInfo{};
     plInfo.sType                = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
     plInfo.stageCount           = numStages;
@@ -921,7 +936,19 @@ RESULT Render::PrepareForDraw()
     plInfo.layout               = pipelineLayout_;
     plInfo.renderPass           = renderPass_[currentBBIdx_];
 
-    VKR_CHECK(vkCreateGraphicsPipelines(vkDevice_, VK_NULL_HANDLE, 1, &plInfo, nullptr, &pipeline));
+    VkPipeline pipeline{};
+
+    PipelineKey plKey = StateToPipelineKey(state_);
+    auto cachedPl = pipelineCache_.find(plKey);
+    if (cachedPl != pipelineCache_.end())
+    {
+        pipeline = cachedPl->second;
+    }
+    else
+    {
+        VKR_CHECK(vkCreateGraphicsPipelines(vkDevice_, VK_NULL_HANDLE, 1, &plInfo, nullptr, &pipeline));
+        pipelineCache_.emplace(plKey, pipeline);
+    }
     // End Create Pipeline
     //-------------------
     #pragma endregion
@@ -1138,6 +1165,11 @@ void Render::Update()
 
     vkResetDescriptorPool(vkDevice_, dynamicUBODPool_[currentBBIdx_], 0);
     // TODO reset command pool for this currentBBIdx_
+
+    // Reset kept alive objects
+    for (int i = 0; i < destroyPipelines_[currentBBIdx_].Count(); ++i)
+        vkDestroyPipeline(vkDevice_, destroyPipelines_[currentBBIdx_][i], nullptr);
+    destroyPipelines_[currentBBIdx_].Clear();
 
     VkCommandBufferBeginInfo beginInfo{};
     beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;

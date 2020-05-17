@@ -1,6 +1,7 @@
 #pragma once
 
 #include "VkTypes.h"
+#include "Types.h"
 
 namespace vkr
 {
@@ -9,7 +10,8 @@ namespace vkr
 class Shader
 {
 public:
-    VkShaderModule vkShader;
+    VkShaderModule vkShader_;
+    uint16 id_;
 };
 
 }

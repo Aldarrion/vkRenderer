@@ -116,7 +116,7 @@ RESULT ShaderManager::CompileShader(const char* file, PipelineStage type, Shader
     shaderInfo.codeSize = shaderc_result_get_length(result);
     shaderInfo.pCode    = (uint*)shaderc_result_get_bytes(result);
 
-    if (VKR_FAILED(vkCreateShaderModule(g_Render->GetDevice(), &shaderInfo, nullptr, &shader.vkShader)))
+    if (VKR_FAILED(vkCreateShaderModule(g_Render->GetDevice(), &shaderInfo, nullptr, &shader.vkShader_)))
     {
         shaderc_result_release(result);
         return R_FAIL;
@@ -127,7 +127,7 @@ RESULT ShaderManager::CompileShader(const char* file, PipelineStage type, Shader
 }
 
 //------------------------------------------------------------------------------
-RESULT ShaderManager::CreateShader(const char* name, Shader* shader) const
+RESULT ShaderManager::CreateShader(const char* name, Shader* shader)
 {
     vkr_assert(shader);
 
@@ -151,6 +151,8 @@ RESULT ShaderManager::CreateShader(const char* name, Shader* shader) const
         Log(LogLevel::Error, "Invalid shader stage extension %s", ext);
         return R_FAIL;
     }
+
+    shader->id_ = ++shaderId_[stage]; // Pre increment to start with id 1
 
     constexpr uint BUFF_LEN = 1024;
     constexpr const char* PATH_PREFIX = "../shaders/%s";
@@ -206,8 +208,8 @@ RESULT ShaderManager::ReloadShaders()
             continue;
         }
 
-        toDestroy_.Add(it.second->vkShader);
-        it.second->vkShader = s.vkShader;
+        toDestroy_.Add(it.second->vkShader_);
+        it.second->vkShader_ = s.vkShader_;
     }
 
     if (reloadFailed)

@@ -4,12 +4,15 @@
 
 #include "DynamicUniformBufferEntry.h"
 
+#include "Hash.h"
 #include "Enums.h"
 #include "Types.h"
 #include "Array.h"
 #include "VkTypes.h"
 
 #include "vkr_Windows.h"
+
+#include <unordered_map> // TODO use custom hashmap
 
 //------------------------------------------------------------------------------
 bool CheckResult(VkResult result, const char* file, int line, const char* fun);
@@ -65,7 +68,7 @@ struct RenderState
 
     VkBuffer            vertexBuffers_[MAX_VERT_BUFF];
     VkDeviceSize        vbOffsets_[MAX_VERT_BUFF];
-    VkDescriptorSet     uboDescSet_;
+    VkDescriptorSet     uboDescSet_{};
 
     VkPipelineVertexInputStateCreateInfo* vertexLayouts_[MAX_VERT_BUFF];
 
@@ -179,13 +182,22 @@ private:
 
     VkDescriptorPool    dynamicUBODPool_[BB_IMG_COUNT]{};
 
+    // Pipelines
+    /*struct PipelineKey
+    {
+        uint64 k[1];
+    };*/
+    using PipelineKey = uint64;
+    std::unordered_map<PipelineKey, VkPipeline, FibonacciHash<PipelineKey>> pipelineCache_;
+
     // UBO cache
     DynamicUBOCache*    uboCache_;
 
     // Allocator
-    VmaAllocator allocator_;
+    VmaAllocator        allocator_;
 
     // Keep alive objects
+    Array<VkPipeline>   destroyPipelines_[BB_IMG_COUNT];
 
     // Shaders
     ShaderManager*          shaderManager_{};
@@ -197,6 +209,8 @@ private:
     RenderState state_;
 
     Array<Material*> materials_;
+
+    static PipelineKey StateToPipelineKey(const RenderState& state);
 
     RESULT PrepareForDraw();
     RESULT AfterDraw();
