@@ -3,14 +3,10 @@
 #include "Config.h"
 
 #include "Enums.h"
+#include "Types.h"
 
 namespace vkr
 {
-
-class Texture;
-class Shader;
-class VertexBuffer;
-class DynamicUniformBuffer;
 
 //------------------------------------------------------------------------------
 class Material
@@ -48,6 +44,7 @@ private:
     Shader*         shapeVert_{};
     Shader*         shapeFrag_{};
     VertexBuffer*   vertexBuffer_{};
+    uint            vertexLayout_{};
 };
 
 }

@@ -5,8 +5,8 @@
 #include "ShaderManager.h"
 #include "VertexBuffer.h"
 #include "DynamicUniformBuffer.h"
+#include "VertexTypes.h"
 
-#include "vkr_Shaderc.h"
 #include "vkr_Image.h"
 #include <string>
 
@@ -77,13 +77,6 @@ void TexturedTriangleMaterial::Draw()
 
 
 //------------------------------------------------------------------------------
-struct ShapeVertex
-{
-    float position_[4];
-    float color_[4];
-};
-
-//------------------------------------------------------------------------------
 RESULT ShapeMaterial::Init()
 {
     shapeVert_ = g_Render->GetShaderManager()->GetOrCreateShader("Shape_vs.hlsl");
@@ -98,16 +91,22 @@ RESULT ShapeMaterial::Init()
 
     auto mapped = (ShapeVertex*) vertexBuffer_->Map();
 
-    mapped[0].position_[0] = 100;
-    mapped[0].position_[1] = 100;
+    mapped[0].position_.v_[0] = 100;
+    mapped[0].position_.v_[1] = 100;
 
-    mapped[1].position_[0] = 400;
-    mapped[1].position_[1] = 100;
+    mapped[1].position_.v_[0] = 400;
+    mapped[1].position_.v_[1] = 100;
 
-    mapped[2].position_[0] = 200;
-    mapped[2].position_[1] = 400;
+    mapped[2].position_.v_[0] = 200;
+    mapped[2].position_.v_[1] = 400;
+
+    mapped[0].color_ = 
+    mapped[1].color_ = 
+    mapped[2].color_ = 0xffff3333;
 
     vertexBuffer_->Unmap();
+
+    vertexLayout_ = ShapeVertexLayout();
 
     return R_OK;
 }
@@ -115,32 +114,7 @@ RESULT ShapeMaterial::Init()
 //------------------------------------------------------------------------------
 void ShapeMaterial::Draw()
 {
-    // TODO move away
-    VkVertexInputAttributeDescription attributeDescriptions[2]{};
-    attributeDescriptions[0].binding = 0;
-    attributeDescriptions[0].location = 0;
-    attributeDescriptions[0].format = VK_FORMAT_R32G32B32A32_SFLOAT;
-    attributeDescriptions[0].offset = 0;
-
-    attributeDescriptions[1].binding = 0;
-    attributeDescriptions[1].location = 1;
-    attributeDescriptions[1].format = VK_FORMAT_R32G32B32A32_SFLOAT;
-    attributeDescriptions[1].offset = 4;
-
-    VkVertexInputBindingDescription bindingDescription{};
-    bindingDescription.binding = 0;
-    bindingDescription.stride = sizeof(ShapeVertex);
-    bindingDescription.inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
-
-    VkPipelineVertexInputStateCreateInfo vertexInputInfo{};
-    vertexInputInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
-    vertexInputInfo.vertexBindingDescriptionCount = 1;
-    vertexInputInfo.pVertexBindingDescriptions = &bindingDescription;
-    vertexInputInfo.vertexAttributeDescriptionCount = vkr_arr_len(attributeDescriptions);
-    vertexInputInfo.pVertexAttributeDescriptions = attributeDescriptions;
-
-
-    g_Render->SetVertexLayout(0, &vertexInputInfo);
+    g_Render->SetVertexLayout(0, vertexLayout_);
 
     g_Render->SetShader<PS_VERT>(shapeVert_);
     g_Render->SetShader<PS_FRAG>(shapeFrag_);

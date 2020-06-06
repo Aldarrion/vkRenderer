@@ -21,7 +21,7 @@ vs_out main(vertex vert)
     o.Pos.z = 1;
     o.Pos.w = 1;
 
-    o.Color = float3(0.9, 0.2, 0.2);
+    o.Color = vert.Color;
 
     return o;
 }

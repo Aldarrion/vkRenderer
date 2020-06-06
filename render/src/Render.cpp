@@ -9,6 +9,8 @@
 #include "VertexBuffer.h"
 #include "DynamicUniformBuffer.h"
 
+#include "DrawCanvas.h"
+
 #include "vkr_Assert.h"
 #include "vkr_Vulkan.h"
 
@@ -140,10 +142,10 @@ struct BindingUBO
 VkPhysicalDeviceFeatures CreateRequiredFeatures()
 {
     VkPhysicalDeviceFeatures features{};
-    
+
     features.samplerAnisotropy = VK_TRUE;
     features.fillModeNonSolid = VK_TRUE;
-    
+
     return features;
 }
 
@@ -751,7 +753,7 @@ RESULT Render::InitWin32(HWND hwnd, HINSTANCE hinst)
         dynamicUbo.maxSets        = 1024;
         dynamicUbo.poolSizeCount  = vkr_arr_len(dynUboSizes);
         dynamicUbo.pPoolSizes     = dynUboSizes;
-    
+
         for (int i = 0; i < BB_IMG_COUNT; ++i)
         {
             if (VKR_FAILED(vkCreateDescriptorPool(vkDevice_, &dynamicUbo, nullptr, &dynamicUBODPool_[i])))
@@ -793,8 +795,8 @@ RESULT Render::InitWin32(HWND hwnd, HINSTANCE hinst)
     //-----------------------
     // Material allocation
     materials_.Add(new TexturedTriangleMaterial());
-    //materials_.Add(new ShapeMaterial());
-
+    materials_.Add(new ShapeMaterial());
+    
     for (int i = 0; i < materials_.Count(); ++i)
     {
         if (FAILED(materials_[i]->Init()))
@@ -803,6 +805,12 @@ RESULT Render::InitWin32(HWND hwnd, HINSTANCE hinst)
             return R_FAIL;
         }
     }
+
+    drawCanvas_ = new DrawCanvas();
+    if (FAILED(drawCanvas_->Init()))
+        return R_FAIL;
+
+    state_.Reset();
 
     return R_OK;
 }
@@ -813,9 +821,13 @@ Render::PipelineKey Render::StateToPipelineKey(const RenderState& state)
     PipelineKey key{};
 
     if (state.shaders_[PS_VERT])
-        key |= state.shaders_[PS_VERT]->id_;   // 16 bit
+        key |= state.shaders_[PS_VERT]->id_;        // 16 bit
     if (state.shaders_[PS_FRAG])
-        key |= state.shaders_[PS_FRAG]->id_ << 16; // 16 bit
+        key |= state.shaders_[PS_FRAG]->id_ << 16;  // 16 bit
+
+    key |= (uint64)state.vertexLayouts_[0] << 32;   // 10 bit
+
+    key |= (uint64)state.primitiveTopology_ << 42;  // 4 bit
 
     return key;
 }
@@ -854,7 +866,7 @@ RESULT Render::PrepareForDraw()
     VkPipelineInputAssemblyStateCreateInfo inputAssembly{};
     {
         inputAssembly.sType                     = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
-        inputAssembly.topology                  = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
+        inputAssembly.topology                  = (VkPrimitiveTopology)state_.primitiveTopology_;
         inputAssembly.primitiveRestartEnable    = VK_FALSE;
     }
 
@@ -919,9 +931,9 @@ RESULT Render::PrepareForDraw()
     plInfo.sType                = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
     plInfo.stageCount           = numStages;
     plInfo.pStages              = stages;
-    if (state_.vertexLayouts_[0])
+    if (state_.vertexLayouts_[0] != RenderState::INVALID_HANDLE)
     {
-        plInfo.pVertexInputState    = state_.vertexLayouts_[0];
+        plInfo.pVertexInputState    = &vertexLayouts_[state_.vertexLayouts_[0]];
     }
     else
     {
@@ -1138,6 +1150,9 @@ void Render::Update()
         materials_[i]->Draw();
     }
 
+    if (drawCanvas_)
+        drawCanvas_->Draw();
+
     //-------------------
     // Submit and Present
 
@@ -1244,9 +1259,15 @@ void Render::SetVertexBuffer(uint slot, VertexBuffer* buffer, uint offset)
 }
 
 //------------------------------------------------------------------------------
-void Render::SetVertexLayout(uint slot, VkPipelineVertexInputStateCreateInfo* layout)
+void Render::SetPrimitiveTopology(VkrPrimitiveTopology primitiveTopology)
 {
-    state_.vertexLayouts_[slot] = layout;
+    state_.primitiveTopology_ = primitiveTopology;
+}
+
+//------------------------------------------------------------------------------
+void Render::SetVertexLayout(uint slot, uint layoutHandle)
+{
+    state_.vertexLayouts_[slot] = layoutHandle;
 }
 
 //------------------------------------------------------------------------------
@@ -1296,8 +1317,23 @@ void RenderState::Reset()
     {
         vertexBuffers_[i] = {};
         vbOffsets_[i] = {};
-        vertexLayouts_[i] = {};
+        vertexLayouts_[i] = INVALID_HANDLE;
     }
+
+    primitiveTopology_ = VkrPrimitiveTopology::TRIANGLE_LIST;
+}
+
+//------------------------------------------------------------------------------
+uint Render::GetOrCreateVertexLayout(VkPipelineVertexInputStateCreateInfo info)
+{
+    for (int i = 0; i < vertexLayouts_.Count(); ++i)
+    {
+        if (memcmp(&vertexLayouts_[i], &info, sizeof(VkPipelineVertexInputStateCreateInfo)))
+            return i;
+    }
+
+    vertexLayouts_.Add(info);
+    return vertexLayouts_.Count() - 1;
 }
 
 }

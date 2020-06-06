@@ -8,6 +8,14 @@ using uint16    = uint16_t;
 using uint      = uint32_t;
 using uint64    = uint64_t;
 
+namespace vkr
+{
+class Texture;
+class Shader;
+class VertexBuffer;
+class DynamicUniformBuffer;
+}
+
 namespace internal
 {
 

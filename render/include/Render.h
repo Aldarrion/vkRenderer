@@ -52,25 +52,30 @@ class VertexBuffer;
 class DynamicUBOCache;
 struct DynamicUBOEntry;
 
+class DrawCanvas;
+
 //------------------------------------------------------------------------------
 struct RenderState
 {
     static constexpr uint MAX_VERT_BUFF = 1;
     static constexpr uint INVALID_DESC = (uint)-1;
+    static constexpr uint INVALID_HANDLE = (uint)-1;
 
-    Shader*             shaders_[PS_COUNT]{};
-    uint                fsTextures_[SRV_SLOT_COUNT]{};
-    DynamicUBOEntry*    dynamicUBOs_[DYNAMIC_UBO_COUNT]{};
-    
-    DynamicUBOEntry     bindlessUBO_{};
+    Shader*                 shaders_[PS_COUNT]{};
+    uint                    fsTextures_[SRV_SLOT_COUNT]{};
+    DynamicUBOEntry*        dynamicUBOs_[DYNAMIC_UBO_COUNT]{};
 
-    uint64              fsDirtyTextures_{};
+    DynamicUBOEntry         bindlessUBO_{};
 
-    VkBuffer            vertexBuffers_[MAX_VERT_BUFF];
-    VkDeviceSize        vbOffsets_[MAX_VERT_BUFF];
-    VkDescriptorSet     uboDescSet_{};
+    uint64                  fsDirtyTextures_{};
 
-    VkPipelineVertexInputStateCreateInfo* vertexLayouts_[MAX_VERT_BUFF];
+    VkBuffer                vertexBuffers_[MAX_VERT_BUFF];
+    VkDeviceSize            vbOffsets_[MAX_VERT_BUFF];
+    VkDescriptorSet         uboDescSet_{};
+
+    uint                    vertexLayouts_[MAX_VERT_BUFF];
+
+    VkrPrimitiveTopology    primitiveTopology_{};
 
     void Reset();
 };
@@ -92,7 +97,8 @@ public:
     }
     void SetTexture(uint slot, Texture* texture);
     void SetVertexBuffer(uint slot, VertexBuffer* buffer, uint offset);
-    void SetVertexLayout(uint slot, VkPipelineVertexInputStateCreateInfo* layout);
+    void SetVertexLayout(uint slot, uint layoutHandle);
+    void SetPrimitiveTopology(VkrPrimitiveTopology primitiveTopology);
     void SetDynamicUbo(uint slot, DynamicUBOEntry* entry);
 
     // Drawing
@@ -118,6 +124,10 @@ public:
     uint AddBindlessTexture(VkImageView view);
 
     const VkPhysicalDeviceProperties& GetPhysDevProps() const;
+
+    //----------------------
+    // Vertex layout manager
+    uint GetOrCreateVertexLayout(VkPipelineVertexInputStateCreateInfo info);
 
 private:
     static constexpr auto VK_VERSION = VK_API_VERSION_1_1;
@@ -165,7 +175,7 @@ private:
     // Queues
     uint                directQueueFamilyIdx_{ VKR_INVALID };
     VkQueue             vkDirectQueue_{};
-    
+
     // Command buffers
     VkCommandPool       directCmdPool_{};
     VkCommandBuffer     directCmdBuffers_[BB_IMG_COUNT]{};
@@ -210,6 +220,11 @@ private:
     RenderState state_;
 
     Array<Material*> materials_;
+    DrawCanvas* drawCanvas_{};
+
+    //----------------------
+    // Vertex layout manager
+    Array<VkPipelineVertexInputStateCreateInfo> vertexLayouts_;
 
     static PipelineKey StateToPipelineKey(const RenderState& state);
 
