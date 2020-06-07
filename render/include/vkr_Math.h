@@ -35,4 +35,20 @@ struct Vec4
     Vec4(float x, float y, float z, float w) : x_(x), y_(y), z_(z), w_(w) {}
 };
 
+//------------------------------------------------------------------------------
+struct Vec2
+{
+    union
+    {
+        float v_[2];
+        struct
+        {
+            float x_, y_;
+        };
+    };
+
+    Vec2() = default;
+    Vec2(float x, float y) : x_(x), y_(y) {}
+};
+
 }

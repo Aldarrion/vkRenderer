@@ -1,9 +1,10 @@
-#include "vkr_Windows.h"
-
 #include "Logging.h"
 #include "Render.h"
 #include "Types.h"
+#include "Input.h"
+
 #include "vkr_Assert.h"
+#include "vkr_Windows.h"
 
 //------------------------------------------------------------------------------
 HWND g_hwnd{};
@@ -84,15 +85,27 @@ int CALLBACK WinMain(HINSTANCE instance, HINSTANCE prevInstance, LPSTR cmdLine, 
 
     if (FAILED(vkr::CreateRender(WIDTH, HEIGHT)))
     {
-        vkr::Log(vkr::LogLevel::Error, "Failed to init render, terminating");
+        vkr::Log(vkr::LogLevel::Error, "Failed to create render");
         return -1;
     }
-
     vkr_assert(vkr::g_Render);
 
     if (FAILED(vkr::g_Render->InitWin32(g_hwnd, instance)))
     {
         vkr::Log(vkr::LogLevel::Error, "Failed to init render");
+        return -1;
+    }
+
+    if (FAILED(vkr::CreateInput()))
+    {
+        vkr::Log(vkr::LogLevel::Error, "Failed to crete input");
+        return -1;
+    }
+    vkr_assert(vkr::g_Input);
+
+    if (FAILED(vkr::g_Input->InitWin32(g_hwnd)))
+    {
+        vkr::Log(vkr::LogLevel::Error, "Failed to init input");
         return -1;
     }
 
@@ -119,6 +132,25 @@ int CALLBACK WinMain(HINSTANCE instance, HINSTANCE prevInstance, LPSTR cmdLine, 
                     if (msg.wParam == VK_F5)
                         vkr::g_Render->ReloadShaders();
                     break;
+                case WM_LBUTTONDOWN:
+                    vkr::g_Input->ButtonDown(vkr::BTN_LEFT);
+                    break;
+                case WM_RBUTTONDOWN:
+                    vkr::g_Input->ButtonDown(vkr::BTN_RIGHT);
+                    break;
+                case WM_MBUTTONDOWN:
+                    vkr::g_Input->ButtonDown(vkr::BTN_MIDDLE);
+                    break;
+                case WM_LBUTTONUP:
+                    vkr::g_Input->ButtonUp(vkr::BTN_LEFT);
+                    break;
+                case WM_RBUTTONUP:
+                    vkr::g_Input->ButtonUp(vkr::BTN_RIGHT);
+                    break;
+                case WM_MBUTTONUP:
+                    vkr::g_Input->ButtonUp(vkr::BTN_MIDDLE);
+                    break;
+
                 default:
                     break;
             }
@@ -126,6 +158,8 @@ int CALLBACK WinMain(HINSTANCE instance, HINSTANCE prevInstance, LPSTR cmdLine, 
         else
         {
             vkr::g_Render->Update();
+            
+            vkr::g_Input->EndFrame();
         }
     }
 

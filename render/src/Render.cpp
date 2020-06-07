@@ -1321,6 +1321,8 @@ void RenderState::Reset()
     }
 
     primitiveTopology_ = VkrPrimitiveTopology::TRIANGLE_LIST;
+    
+    cullMode_ = VkrCullMode::Back;
 }
 
 //------------------------------------------------------------------------------

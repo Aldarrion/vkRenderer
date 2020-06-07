@@ -35,5 +35,13 @@ enum class VkrPrimitiveTopology
     PATCH_LIST = 10
 };
 
+//------------------------------------------------------------------------------
+enum class VkrCullMode
+{
+    Back,
+    Front,
+    None
+};
+
 }
 

@@ -18,6 +18,8 @@ private:
     Shader*         lineVert_{};
     Shader*         lineFrag_{};
     uint            lineVertType_{};
+
+    uint            lineCount_{};
 };
 
 }

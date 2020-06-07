@@ -34,8 +34,7 @@ static constexpr uint IMMUTABLE_SAMPLER_COUNT = 1;
 static constexpr uint DYNAMIC_UBO_COUNT = 1;
 
 //------------------------------------------------------------------------------
-class Render;
-extern Render* g_Render;
+extern class Render* g_Render;
 
 //------------------------------------------------------------------------------
 RESULT CreateRender(uint width, uint height);
@@ -76,6 +75,7 @@ struct RenderState
     uint                    vertexLayouts_[MAX_VERT_BUFF];
 
     VkrPrimitiveTopology    primitiveTopology_{};
+    VkrCullMode             cullMode_{};
 
     void Reset();
 };

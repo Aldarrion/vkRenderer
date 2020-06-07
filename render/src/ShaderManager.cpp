@@ -197,7 +197,7 @@ Shader* ShaderManager::GetOrCreateShader(const char* name)
 RESULT ShaderManager::ReloadShaders()
 {
     // TODO check timestamps of files to avoid reloading of all shaders
-    
+
     bool reloadFailed = false;
     Shader s;
     for (const auto& it : cache_)
