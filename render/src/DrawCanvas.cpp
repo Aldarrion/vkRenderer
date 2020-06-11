@@ -23,9 +23,11 @@ RESULT DrawCanvas::Init()
 
     lineVertType_ = ShapeVertexLayout();
 
-    lines_ = new VertexBuffer(MAX_LINE_VERTS * sizeof(ShapeVertex));
-    if (FAILED(lines_->Init()))
+    linesBuffer_ = new VertexBuffer(MAX_LINE_VERTS * sizeof(ShapeVertex));
+    if (FAILED(linesBuffer_->Init()))
         return R_FAIL;
+
+    drawMode_ = DrawMode::CatmullRom;
 
     return R_OK;
 }
@@ -36,32 +38,71 @@ void DrawCanvas::Draw()
     // Update
     if (g_Input->IsButtonDown(BTN_LEFT))
     {
-        if (lineCount_ == MAX_LINE_VERTS)
-            lineCount_ = 0;
+        if (points_.Count() == MAX_LINE_VERTS)
+            points_.Clear();
 
         Vec2 mousePos = g_Input->GetMousePos();
-
-        auto verts = (ShapeVertex*)lines_->Map();
-        verts[lineCount_].position_ = Vec4(mousePos.x_, mousePos.y_, 0, 0);
-        verts[lineCount_].color_ = 0xff2222dd;
-
-        lines_->Unmap();
-
-        ++lineCount_;
+        points_.Add(mousePos);
     }
 
-    // Render
-    if (lineCount_ < 2)
+    if (points_.Count() < 2)
         return;
 
-    g_Render->SetVertexBuffer(0, lines_, 0);
+    // Copy to VB
+    uint vertsToDraw = 0;
+
+    auto verts = (ShapeVertex*)linesBuffer_->Map();
+    if (drawMode_ == DrawMode::Lines)
+    {
+        for (int i = 0; i < points_.Count(); ++i)
+        {
+            verts[i].position_ = Vec4(points_[i].x_, points_[i].y_, 0, 0);
+            verts[i].color_ = 0xff2222dd;
+        }
+        vertsToDraw = points_.Count();
+    }
+    else
+    {
+        vkr_assert(drawMode_ == DrawMode::CatmullRom);
+
+        const uint tesselLevel = 5;
+
+        for (int i = 0; i < points_.Count() - 1; ++i)
+        {
+            Vec2 p0 = points_[i];
+            Vec2 p1 = points_[i + 1];
+            Vec2 m0 = i == 0 ? Vec2(0, 0) : p1 - points_[i - 1];
+            Vec2 m1 = i == points_.Count() - 2 ? Vec2(0, 0) : points_[i + 2] - p0;
+
+            for (int j = 0; j <= tesselLevel; ++j)
+            {
+                float t = (float)j / tesselLevel;
+                float t2 = t * t;
+                float t3 = t2 * t;
+                Vec2 pos = 
+                    (2 * t3 - 3 * t2 + 1) * p0
+                    + (t3 - 2 * t2 + t) * m0
+                    + (-2 * t3 + 3 * t2) * p1
+                    + (t3 - t2) * m1;
+
+                verts[i * tesselLevel + j].position_ = Vec4(pos.x_, pos.y_, 0, 0);
+                verts[i * tesselLevel + j].color_ = 0xff2222dd;
+            }
+        }
+
+        vertsToDraw = (points_.Count() - 1) * tesselLevel + 1;
+    }
+    linesBuffer_->Unmap();
+
+    // Render
+    g_Render->SetVertexBuffer(0, linesBuffer_, 0);
     g_Render->SetShader<PS_VERT>(lineVert_);
     g_Render->SetShader<PS_FRAG>(lineFrag_);
     g_Render->SetPrimitiveTopology(VkrPrimitiveTopology::LINE_STRIP);
 
     g_Render->SetVertexLayout(0, lineVertType_);
 
-    g_Render->Draw(lineCount_, 0);
+    g_Render->Draw(vertsToDraw, 0);
 }
 
 }

@@ -3,10 +3,20 @@
 #include "Config.h"
 #include "Enums.h"
 #include "Types.h"
+#include "Array.h"
+#include "vkr_Math.h"
 
 namespace vkr
 {
 
+//------------------------------------------------------------------------------
+enum class DrawMode
+{
+    Lines,
+    CatmullRom
+};
+
+//------------------------------------------------------------------------------
 class DrawCanvas
 {
 public:
@@ -14,12 +24,14 @@ public:
     void Draw();
 
 private:
-    VertexBuffer*   lines_{};
+    VertexBuffer*   linesBuffer_{};
     Shader*         lineVert_{};
     Shader*         lineFrag_{};
     uint            lineVertType_{};
 
-    uint            lineCount_{};
+    Array<Vec2>     points_;
+
+    DrawMode        drawMode_{};
 };
 
 }

@@ -794,8 +794,8 @@ RESULT Render::InitWin32(HWND hwnd, HINSTANCE hinst)
 
     //-----------------------
     // Material allocation
-    materials_.Add(new TexturedTriangleMaterial());
-    materials_.Add(new ShapeMaterial());
+    //materials_.Add(new TexturedTriangleMaterial());
+    //materials_.Add(new ShapeMaterial());
     
     for (int i = 0; i < materials_.Count(); ++i)
     {
@@ -967,7 +967,7 @@ RESULT Render::PrepareForDraw()
 
     //-------------------
     // Descriptors
-    if (state_.fsDirtyTextures_)
+    if (state_.fsDirtyTextures_ || true) // TODO handle the case where no textures are dirty but a UBO descriptor set is needed
     {
         void* mapped;
         state_.bindlessUBO_ = uboCache_->BeginAlloc(sizeof(BindingUBO), &mapped);
