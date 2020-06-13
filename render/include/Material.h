@@ -47,4 +47,16 @@ private:
     uint            vertexLayout_{};
 };
 
+//------------------------------------------------------------------------------
+class PhongMaterial : public Material
+{
+public:
+    RESULT Init() override;
+    void Draw() override;
+
+private:
+    Shader*         phongVert_{};
+    Shader*         phongFrag_{};
+};
+
 }

@@ -3,11 +3,11 @@ struct BindingUBO
     uint4 SRV[2]; // TODO use constant
 };
 
-#define BindingIdx(x) Bindings.SRV[x / 4][x % 4]
+#define BindingIdx(x) Bindings.SRV[x >> 2][x & 3]
 
 SamplerState PointSampler : register(s0, space0);
 Texture2D AllTextures[] : register(t0, space1);
-ConstantBuffer<BindingUBO> Bindings : register(c0, space2);
+ConstantBuffer<BindingUBO> Bindings : register(b0, space2);
 
 struct ps_in
 {

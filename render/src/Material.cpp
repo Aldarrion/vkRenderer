@@ -91,14 +91,14 @@ RESULT ShapeMaterial::Init()
 
     auto mapped = (ShapeVertex*) vertexBuffer_->Map();
 
-    mapped[0].position_.v_[0] = 100;
-    mapped[0].position_.v_[1] = 100;
+    mapped[0].position_.v[0] = 100;
+    mapped[0].position_.v[1] = 100;
 
-    mapped[1].position_.v_[0] = 400;
-    mapped[1].position_.v_[1] = 100;
+    mapped[1].position_.v[0] = 400;
+    mapped[1].position_.v[1] = 100;
 
-    mapped[2].position_.v_[0] = 200;
-    mapped[2].position_.v_[1] = 400;
+    mapped[2].position_.v[0] = 200;
+    mapped[2].position_.v[1] = 400;
 
     mapped[0].color_ = 
     mapped[1].color_ = 
@@ -120,6 +120,44 @@ void ShapeMaterial::Draw()
     g_Render->SetShader<PS_FRAG>(shapeFrag_);
 
     g_Render->SetVertexBuffer(0, vertexBuffer_, 0);
+
+    g_Render->Draw(3, 0);
+}
+
+//------------------------------------------------------------------------------
+RESULT PhongMaterial::Init()
+{
+    phongVert_ = g_Render->GetShaderManager()->GetOrCreateShader("Phong_vs.hlsl");
+    phongFrag_ = g_Render->GetShaderManager()->GetOrCreateShader("Phong_fs.hlsl");
+
+    if (!phongVert_ || !phongFrag_)
+        return R_FAIL;
+
+    return R_OK;
+}
+
+//------------------------------------------------------------------------------
+void PhongMaterial::Draw()
+{
+    struct MatrixUBO
+    {
+        Vec4 v;
+    };
+
+
+    void* mapped;
+    DynamicUBOEntry constBuffer = g_Render->GetUBOCache()->BeginAlloc(sizeof(MatrixUBO), &mapped);
+        
+    auto ubo = (MatrixUBO*)mapped;
+    ubo->v = Vec4(1.0f, 0.5f, 1.0f, 1.0f);
+    
+    g_Render->GetUBOCache()->EndAlloc();
+
+    g_Render->SetDynamicUbo(1, &constBuffer);
+
+
+    g_Render->SetShader<PS_VERT>(phongVert_);
+    g_Render->SetShader<PS_FRAG>(phongFrag_);
 
     g_Render->Draw(3, 0);
 }

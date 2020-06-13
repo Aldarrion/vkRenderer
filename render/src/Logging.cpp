@@ -1,10 +1,13 @@
 #include "Logging.h"
 
-#include <stdio.h>
-#include <stdarg.h>
+#include "Types.h"
 
+#include "vkr_Math.h"
 #include "vkr_Assert.h"
 #include "vkr_Windows.h"
+
+#include <stdio.h>
+#include <stdarg.h>
 
 namespace vkr
 {
@@ -43,6 +46,27 @@ void Log(LogLevel level, const char* formatString, ...)
     buffer[prefixSize + len + 1] = '\0';
 
     OutputDebugStringA(buffer);
+}
+
+//------------------------------------------------------------------------------
+void Mat44ToString(const Mat44& m, char* buff)
+{
+    constexpr const char* LINE = "1.111 2.222 3.333 4.444\n";
+    uint LINE_LEN = strlen(LINE);
+    
+    uint offset = 0;
+    for (int i = 0; i < 4; ++i)
+    {
+        offset += sprintf(buff + offset, "%.3f %.3f %.3f %.3f\n", m(i, 0), m(i, 1), m(i, 2), m(i, 3));
+    }
+}
+
+//------------------------------------------------------------------------------
+void LogMat44(const Mat44& m)
+{
+    static char c[512];
+    Mat44ToString(m, c);
+    Log(LogLevel::Info, "\n%s", c);
 }
 
 }

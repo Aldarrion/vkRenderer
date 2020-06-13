@@ -604,7 +604,6 @@ RESULT Render::InitWin32(HWND hwnd, HINSTANCE hinst)
 
     //-----------------------
     // Pipeline layout
-    // Pipeline layout is empty for now
     VkSamplerCreateInfo pointClampInfo{};
     pointClampInfo.sType         = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
     pointClampInfo.magFilter     = VK_FILTER_NEAREST;
@@ -642,7 +641,7 @@ RESULT Render::InitWin32(HWND hwnd, HINSTANCE hinst)
     VkDescriptorSetLayoutBinding srvBindings[1]{};
     srvBindings[0].binding             = 0;
     srvBindings[0].descriptorType      = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE;
-    srvBindings[0].descriptorCount     = 500000; // Minimum limit
+    srvBindings[0].descriptorCount     = 500'000; // Minimum limit
     srvBindings[0].stageFlags          = VK_SHADER_STAGE_FRAGMENT_BIT | VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_COMPUTE_BIT;
 
     VkDescriptorBindingFlags bindingFlags = VK_DESCRIPTOR_BINDING_UPDATE_AFTER_BIND_BIT | VK_DESCRIPTOR_BINDING_VARIABLE_DESCRIPTOR_COUNT_BIT | VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT;
@@ -662,11 +661,14 @@ RESULT Render::InitWin32(HWND hwnd, HINSTANCE hinst)
         return R_FAIL;
 
     // UBO
-    VkDescriptorSetLayoutBinding uboBindings[1]{};
+    VkDescriptorSetLayoutBinding uboBindings[DYNAMIC_UBO_COUNT + 1]{};
     uboBindings[0].binding             = 0;
     uboBindings[0].descriptorType      = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC;
-    uboBindings[0].descriptorCount     = DYNAMIC_UBO_COUNT;
+    uboBindings[0].descriptorCount     = 1;
     uboBindings[0].stageFlags          = VK_SHADER_STAGE_FRAGMENT_BIT | VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_COMPUTE_BIT;
+
+    uboBindings[1] = uboBindings[0];
+    uboBindings[1].binding             = 1;
 
     VkDescriptorSetLayoutCreateInfo dynamicUbo{};
     dynamicUbo.sType           = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
@@ -695,7 +697,7 @@ RESULT Render::InitWin32(HWND hwnd, HINSTANCE hinst)
     {
         VkDescriptorPoolSize poolSizes[1]{};
         poolSizes[0].type              = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE;
-        poolSizes[0].descriptorCount   = 500000;
+        poolSizes[0].descriptorCount   = 500'000;
 
         VkDescriptorPoolCreateInfo poolInfo{};
         poolInfo.sType          = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
@@ -746,7 +748,7 @@ RESULT Render::InitWin32(HWND hwnd, HINSTANCE hinst)
     {
         VkDescriptorPoolSize dynUboSizes[1]{};
         dynUboSizes[0].type              = VK_DESCRIPTOR_TYPE_SAMPLER;
-        dynUboSizes[0].descriptorCount   = DYNAMIC_UBO_COUNT;
+        dynUboSizes[0].descriptorCount   = DYNAMIC_UBO_COUNT + 1;
 
         VkDescriptorPoolCreateInfo dynamicUbo{};
         dynamicUbo.sType          = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
@@ -794,8 +796,9 @@ RESULT Render::InitWin32(HWND hwnd, HINSTANCE hinst)
 
     //-----------------------
     // Material allocation
-    //materials_.Add(new TexturedTriangleMaterial());
+    materials_.Add(new TexturedTriangleMaterial());
     //materials_.Add(new ShapeMaterial());
+    //materials_.Add(new PhongMaterial());
     
     for (int i = 0; i < materials_.Count(); ++i)
     {
@@ -967,6 +970,15 @@ RESULT Render::PrepareForDraw()
 
     //-------------------
     // Descriptors
+    VkDescriptorSetAllocateInfo dsAllocInfo{};
+    dsAllocInfo.sType               = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+    dsAllocInfo.descriptorPool      = dynamicUBODPool_[currentBBIdx_];
+    dsAllocInfo.descriptorSetCount  = 1;
+    dsAllocInfo.pSetLayouts         = &dynamicUBOLayout_;
+
+    if (VKR_FAILED(vkAllocateDescriptorSets(vkDevice_, &dsAllocInfo, &state_.uboDescSet_)))
+        return R_FAIL;
+
     if (state_.fsDirtyTextures_ || true) // TODO handle the case where no textures are dirty but a UBO descriptor set is needed
     {
         void* mapped;
@@ -975,45 +987,58 @@ RESULT Render::PrepareForDraw()
         auto ubo = (BindingUBO*)mapped;
         for (uint i = 0; i < SRV_SLOT_COUNT; ++i)
         {
-            ubo->SRV[i] = state_.fsTextures_[i];
+            //ubo->SRV[i] = state_.fsTextures_[i];
+            ubo->SRV[i] = 1;
         }
         uboCache_->EndAlloc();
-
-        VkDescriptorSetAllocateInfo dsAllocInfo{};
-        dsAllocInfo.sType               = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
-        dsAllocInfo.descriptorPool      = dynamicUBODPool_[currentBBIdx_];
-        dsAllocInfo.descriptorSetCount  = 1;
-        dsAllocInfo.pSetLayouts         = &dynamicUBOLayout_;
-
-        if (VKR_FAILED(vkAllocateDescriptorSets(vkDevice_, &dsAllocInfo, &state_.uboDescSet_)))
-            return R_FAIL;
-
-        // Copy descriptors
-        VkDescriptorBufferInfo buffInfo[DYNAMIC_UBO_COUNT]{};
-        buffInfo[0].buffer = state_.bindlessUBO_.buffer_;
-        buffInfo[0].offset = 0;
-        buffInfo[0].range  = state_.bindlessUBO_.size_;
-
-        VkWriteDescriptorSet UBOWrite{};
-        UBOWrite.sType              = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-        UBOWrite.dstSet             = state_.uboDescSet_;
-        UBOWrite.dstBinding         = 0;
-        UBOWrite.dstArrayElement    = 0;
-        UBOWrite.descriptorCount    = DYNAMIC_UBO_COUNT;
-        UBOWrite.descriptorType     = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC;
-        UBOWrite.pBufferInfo        = buffInfo;
-
-        vkUpdateDescriptorSets(vkDevice_, 1, &UBOWrite, 0, nullptr);
     }
+
+    // Copy descriptors
+    VkDescriptorBufferInfo buffInfo[DYNAMIC_UBO_COUNT + 1]{};
+    buffInfo[0].buffer = state_.bindlessUBO_.buffer_;
+    buffInfo[0].offset = 0;
+    buffInfo[0].range  = state_.bindlessUBO_.size_;
+
+    uint dynOffsets[DYNAMIC_UBO_COUNT + 1]{};
+    dynOffsets[0] = state_.bindlessUBO_.dynOffset_;
+    
+    VkWriteDescriptorSet UBOWrites[2]{};
+    UBOWrites[0].sType              = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+    UBOWrites[0].dstSet             = state_.uboDescSet_;
+    UBOWrites[0].dstBinding         = 0;
+    UBOWrites[0].dstArrayElement    = 0;
+    UBOWrites[0].descriptorCount    = 1;
+    UBOWrites[0].descriptorType     = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC;
+    UBOWrites[0].pBufferInfo        = buffInfo;
+
+    uint writeCount = 1;
+
+    if (state_.dynamicUBOs_[0])
+    {
+        buffInfo[1].buffer = state_.dynamicUBOs_[0]->buffer_;
+        buffInfo[1].offset = 0;
+        buffInfo[1].range  = state_.dynamicUBOs_[0]->size_;
+
+        dynOffsets[1] = state_.dynamicUBOs_[0]->dynOffset_;
+
+        ++writeCount;
+        UBOWrites[1].sType              = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+        UBOWrites[1].dstSet             = state_.uboDescSet_;
+        UBOWrites[1].dstBinding         = 1;
+        UBOWrites[1].dstArrayElement    = 0;
+        UBOWrites[1].descriptorCount    = 1;
+        UBOWrites[1].descriptorType     = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC;
+        UBOWrites[1].pBufferInfo        = &buffInfo[1];
+    }
+
+
+    vkUpdateDescriptorSets(vkDevice_, writeCount, UBOWrites, 0, nullptr);
 
     VkDescriptorSet descSets[] = {
         immutableSamplerSet_,
         bindlessSet_,
         state_.uboDescSet_,
     };
-
-    uint dynOffsets[DYNAMIC_UBO_COUNT]{};
-    dynOffsets[0] = state_.bindlessUBO_.dynOffset_;
 
     vkCmdBindDescriptorSets(CmdBuff(), VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout_, 0, vkr_arr_len(descSets), descSets, vkr_arr_len(dynOffsets), dynOffsets);
 
@@ -1166,7 +1191,9 @@ void Render::Update()
     submit.pCommandBuffers      = &directCmdBuffers_[currentBBIdx_];
 
     VKR_CHECK(vkQueueSubmit(vkDirectQueue_, 1, &submit, directQueueFences_[currentBBIdx_]));
-        
+
+    // TODO add semaphores for queue submit finish
+
     VkPresentInfoKHR presentInfo{};
     presentInfo.sType           = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
     presentInfo.swapchainCount  = 1;
@@ -1239,6 +1266,12 @@ const VkPhysicalDeviceProperties& Render::GetPhysDevProps() const
 }
 
 //------------------------------------------------------------------------------
+DynamicUBOCache* Render::GetUBOCache()
+{
+    return uboCache_;
+}
+
+//------------------------------------------------------------------------------
 void Render::SetTexture(uint slot, Texture* texture)
 {
     uint texIdx = texture->GetBindlessIndex();
@@ -1273,9 +1306,9 @@ void Render::SetVertexLayout(uint slot, uint layoutHandle)
 //------------------------------------------------------------------------------
 void Render::SetDynamicUbo(uint slot, DynamicUBOEntry* entry)
 {
-    vkr_assert(slot < DYNAMIC_UBO_COUNT);
+    vkr_assert(slot < DYNAMIC_UBO_COUNT + 1);
 
-    state_.dynamicUBOs_[slot] = entry;
+    state_.dynamicUBOs_[slot - 1] = entry;
 }
 
 //------------------------------------------------------------------------------

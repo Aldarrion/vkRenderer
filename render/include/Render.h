@@ -10,6 +10,7 @@
 #include "Array.h"
 #include "VkTypes.h"
 
+#include "vkr_Math.h"
 #include "vkr_Windows.h"
 
 #include <unordered_map> // TODO use custom hashmap
@@ -56,6 +57,7 @@ class DrawCanvas;
 //------------------------------------------------------------------------------
 struct RenderState
 {
+    static constexpr uint MAX_CONST_BUFF = 1;
     static constexpr uint MAX_VERT_BUFF = 1;
     static constexpr uint INVALID_DESC = (uint)-1;
     static constexpr uint INVALID_HANDLE = (uint)-1;
@@ -124,6 +126,8 @@ public:
     uint AddBindlessTexture(VkImageView view);
 
     const VkPhysicalDeviceProperties& GetPhysDevProps() const;
+
+    DynamicUBOCache* GetUBOCache();
 
     //----------------------
     // Vertex layout manager
@@ -232,6 +236,10 @@ private:
     RESULT AfterDraw();
 
     RESULT WaitForFence(VkFence fence);
+
+    //----------------------
+    // Camera
+    Mat44 cameraMatrix_ = Mat44::Identity();
 };
 
 

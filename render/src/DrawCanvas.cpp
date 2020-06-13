@@ -6,6 +6,8 @@
 #include "VertexBuffer.h"
 #include "Input.h"
 
+#include "Logging.h"
+
 namespace vkr
 {
 
@@ -56,7 +58,7 @@ void DrawCanvas::Draw()
     {
         for (int i = 0; i < points_.Count(); ++i)
         {
-            verts[i].position_ = Vec4(points_[i].x_, points_[i].y_, 0, 0);
+            verts[i].position_ = Vec4(points_[i].x, points_[i].y, 0, 0);
             verts[i].color_ = 0xff2222dd;
         }
         vertsToDraw = points_.Count();
@@ -85,7 +87,7 @@ void DrawCanvas::Draw()
                     + (-2 * t3 + 3 * t2) * p1
                     + (t3 - t2) * m1;
 
-                verts[i * tesselLevel + j].position_ = Vec4(pos.x_, pos.y_, 0, 0);
+                verts[i * tesselLevel + j].position_ = Vec4(pos.x, pos.y, 0, 0);
                 verts[i * tesselLevel + j].color_ = 0xff2222dd;
             }
         }
