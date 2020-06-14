@@ -529,6 +529,17 @@ RESULT Render::InitWin32(HWND hwnd, HINSTANCE hinst)
         return R_FAIL;
 
     //-----------------------
+    // Create semaphores
+    VkSemaphoreCreateInfo semaphoreCreate{};
+    semaphoreCreate.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
+
+    for (int i = 0; i < BB_IMG_COUNT; ++i)
+    {
+        if (VKR_FAILED(vkCreateSemaphore(vkDevice_, &semaphoreCreate, nullptr, &submitSemaphores_[i])))
+            return R_FAIL;
+    }
+
+    //-----------------------
     // Get current back buffer
     uint swapchainImageCount{};
     if (VKR_FAILED(vkGetSwapchainImagesKHR(vkDevice_, vkSwapchain_, &swapchainImageCount, nullptr)))
@@ -1189,16 +1200,18 @@ void Render::Update()
     submit.sType                = VK_STRUCTURE_TYPE_SUBMIT_INFO;
     submit.commandBufferCount   = 1;
     submit.pCommandBuffers      = &directCmdBuffers_[currentBBIdx_];
+    submit.signalSemaphoreCount = 1;
+    submit.pSignalSemaphores    = &submitSemaphores_[currentBBIdx_];
 
     VKR_CHECK(vkQueueSubmit(vkDirectQueue_, 1, &submit, directQueueFences_[currentBBIdx_]));
 
-    // TODO add semaphores for queue submit finish
-
     VkPresentInfoKHR presentInfo{};
-    presentInfo.sType           = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
-    presentInfo.swapchainCount  = 1;
-    presentInfo.pSwapchains     = &vkSwapchain_;
-    presentInfo.pImageIndices   = &currentBBIdx_;
+    presentInfo.sType               = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
+    presentInfo.swapchainCount      = 1;
+    presentInfo.pSwapchains         = &vkSwapchain_;
+    presentInfo.pImageIndices       = &currentBBIdx_;
+    presentInfo.waitSemaphoreCount  = 1;
+    presentInfo.pWaitSemaphores     = &submitSemaphores_[currentBBIdx_];
 
     VKR_CHECK(vkQueuePresentKHR(vkDirectQueue_, &presentInfo));
 

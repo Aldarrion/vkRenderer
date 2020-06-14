@@ -176,6 +176,8 @@ private:
     VkFence             directQueueFences_[BB_IMG_COUNT]{};
     VkFence             nextImageFence_;
 
+    VkSemaphore         submitSemaphores_[BB_IMG_COUNT]{};
+
     // Queues
     uint                directQueueFamilyIdx_{ VKR_INVALID };
     VkQueue             vkDirectQueue_{};
