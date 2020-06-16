@@ -807,9 +807,9 @@ RESULT Render::InitWin32(HWND hwnd, HINSTANCE hinst)
 
     //-----------------------
     // Material allocation
-    materials_.Add(new TexturedTriangleMaterial());
+    //materials_.Add(new TexturedTriangleMaterial());
     //materials_.Add(new ShapeMaterial());
-    //materials_.Add(new PhongMaterial());
+    materials_.Add(new PhongMaterial());
     
     for (int i = 0; i < materials_.Count(); ++i)
     {
@@ -889,9 +889,9 @@ RESULT Render::PrepareForDraw()
     VkRect2D scissor{};
     {
         viewport.x          = 0.0f;
-        viewport.y          = 0.0f;
+        viewport.y          = (float)height_;
         viewport.width      = (float)width_;
-        viewport.height     = (float)height_;
+        viewport.height     = -(float)height_;
         viewport.minDepth   = 0.0f;
         viewport.maxDepth   = 1.0f;
 
@@ -998,8 +998,7 @@ RESULT Render::PrepareForDraw()
         auto ubo = (BindingUBO*)mapped;
         for (uint i = 0; i < SRV_SLOT_COUNT; ++i)
         {
-            //ubo->SRV[i] = state_.fsTextures_[i];
-            ubo->SRV[i] = 1;
+            ubo->SRV[i] = state_.fsTextures_[i];
         }
         uboCache_->EndAlloc();
     }
@@ -1282,6 +1281,24 @@ const VkPhysicalDeviceProperties& Render::GetPhysDevProps() const
 DynamicUBOCache* Render::GetUBOCache()
 {
     return uboCache_;
+}
+
+//------------------------------------------------------------------------------
+uint Render::GetWidth() const
+{
+    return width_;
+}
+
+//------------------------------------------------------------------------------
+uint Render::GetHeight() const
+{
+    return height_;
+}
+
+//------------------------------------------------------------------------------
+float Render::GetAspect() const
+{
+    return 1.0f * width_ / height_;
 }
 
 //------------------------------------------------------------------------------

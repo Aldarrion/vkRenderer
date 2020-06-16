@@ -1,9 +1,9 @@
 
 static const float3 TriangleVerts[3] =
 {
-    float3(-100, 100, 0.5),
-    float3(100, 100, 0.5),
-    float3(0, -100, 0.5)
+    float3(0, 0, 50),
+    float3(10, 0, 50),
+    float3(0, 10, 50)
 };
 
 struct vs_out
@@ -14,25 +14,17 @@ struct vs_out
 
 struct Vec
 {
-    float4 v;
+    float4x4 projection;
 };
 
-ConstantBuffer<Vec> TestVec : register(b1, space2);
-
-struct BindingUBO
-{
-    uint4 SRV[2]; // TODO use constant
-};
-ConstantBuffer<BindingUBO> Bindings : register(b0, space2);
+ConstantBuffer<Vec> Mat : register(b1, space2);
 
 vs_out main(uint vertID : SV_VERTEXID)
 {
     vs_out o = vs_out(0);
 
-    o.Pos = float4(TriangleVerts[vertID], 1);
-    o.Color = float3(1, 0, 0);
-
-    o.Color = Bindings.SRV[0].rgb;
+    o.Pos = float4(TriangleVerts[vertID], 1) * Mat.projection;
+    o.Color = float3(0.8, 0.2, 0.1);
 
     return o;
 }

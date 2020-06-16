@@ -17,7 +17,7 @@ vs_out main(vertex vert)
     vs_out o;
 
     o.Pos.x = (vert.Pos.x / dimensions.x) * 2 - 1;
-    o.Pos.y = (vert.Pos.y / dimensions.y) * 2 - 1;
+    o.Pos.y = ((dimensions.y - vert.Pos.y) / dimensions.y) * 2 - 1;
     o.Pos.z = 1;
     o.Pos.w = 1;
 

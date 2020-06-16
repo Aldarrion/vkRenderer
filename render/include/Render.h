@@ -129,6 +129,10 @@ public:
 
     DynamicUBOCache* GetUBOCache();
 
+    uint GetWidth() const;
+    uint GetHeight() const;
+    float GetAspect() const;
+
     //----------------------
     // Vertex layout manager
     uint GetOrCreateVertexLayout(VkPipelineVertexInputStateCreateInfo info);

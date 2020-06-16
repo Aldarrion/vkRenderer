@@ -97,11 +97,11 @@ DynamicUBOEntry DynamicUBOCache::BeginAlloc(uint size, void** data)
     result.dynOffset_ = entries_[0].begin_;
     result.size_ = size;
 
+    *data = (uint8*)entries_[0].buffer_.Map() + entries_[0].begin_;
+
     entries_[0].safeFrame_ = g_Render->GetSafeFrame();
     entries_[0].begin_ += size;
 
-    *data = entries_[0].buffer_.Map();
-    
     return result;
 }
 

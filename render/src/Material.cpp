@@ -141,16 +141,20 @@ void PhongMaterial::Draw()
 {
     struct MatrixUBO
     {
-        Vec4 v;
+        Mat44 projection;
     };
 
 
     void* mapped;
     DynamicUBOEntry constBuffer = g_Render->GetUBOCache()->BeginAlloc(sizeof(MatrixUBO), &mapped);
-        
+
     auto ubo = (MatrixUBO*)mapped;
-    ubo->v = Vec4(1.0f, 0.5f, 1.0f, 1.0f);
-    
+    float extent = 20;
+    //ubo->projection = MakeOrthographicProjection(-extent, extent, -extent / g_Render->GetAspect(), extent / g_Render->GetAspect(), 0.1f, 1000);
+    ubo->projection = MakePerspectiveProjection(DegToRad(75), g_Render->GetAspect(), 0.1f, 100);
+
+    Vec4 res = Vec4(100, 100, 10, 1) * ubo->projection;
+
     g_Render->GetUBOCache()->EndAlloc();
 
     g_Render->SetDynamicUbo(1, &constBuffer);

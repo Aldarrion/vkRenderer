@@ -1,8 +1,8 @@
 static float3 TriangleVerts[3] =
 {
-    float3(-0.5, 0.5, 0.5),
-    float3(0.5, 0.5, 0.5),
-    float3(0, -0.5, 0.5)
+    float3(-0.5, -0.5, 0.5),
+    float3(0.5, -0.5, 0.5),
+    float3(0, 0.5, 0.5)
 };
 
 static float2 TriangleVertsPx[3] =
