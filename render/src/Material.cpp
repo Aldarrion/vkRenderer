@@ -153,7 +153,9 @@ void PhongMaterial::Draw()
     //ubo->projection = MakeOrthographicProjection(-extent, extent, -extent / g_Render->GetAspect(), extent / g_Render->GetAspect(), 0.1f, 1000);
     ubo->projection = MakePerspectiveProjection(DegToRad(75), g_Render->GetAspect(), 0.1f, 100);
 
-    Vec4 res = Vec4(100, 100, 10, 1) * ubo->projection;
+    Mat44 lookAt = MakeLookAt(Vec3(0, 60, 0), Vec3(0, 0, 50));
+
+    ubo->projection = lookAt * ubo->projection;
 
     g_Render->GetUBOCache()->EndAlloc();
 

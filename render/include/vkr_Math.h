@@ -52,6 +52,111 @@ struct Vec4
 };
 
 //------------------------------------------------------------------------------
+struct Vec3
+{
+    union
+    {
+        float v[3];
+        struct
+        {
+            float x, y, z;
+        };
+    };
+
+    Vec3() = default;
+    constexpr Vec3(float x, float y, float z) : x(x), y(y), z(z) {}
+
+    constexpr float Dot(const Vec3& b) const
+    {
+        return 
+            x * b.x
+            + y * b.y
+            + z * b.z;
+    }
+
+    constexpr Vec3 Cross(const Vec3& b) const
+    {
+        return Vec3(
+            y * b.z - z * b.y,
+            z * b.x - x * b.z,
+            x * b.y - y * b.x
+        );
+    }
+
+    constexpr float LengthSqr() const
+    {
+        return Dot(*this);
+    }
+
+    float Length() const
+    {
+        return sqrt(LengthSqr());
+    }
+
+    void Normalize()
+    {
+        float lenRec = 1.0f / Length();
+        x *= lenRec;
+        y *= lenRec;
+        z *= lenRec;
+    }
+
+    Vec3 Normalized() const
+    {
+        float lenRec = 1.0f / Length();
+        return Vec3(x * lenRec, y * lenRec, z * lenRec);
+    }
+};
+
+namespace math
+{
+//------------------------------------------------------------------------------
+static constexpr Vec3 UP = Vec3(0, 1, 0);
+//------------------------------------------------------------------------------
+static constexpr Vec3 FORWARD = Vec3(0, 0, 1);
+//------------------------------------------------------------------------------
+static constexpr Vec3 RIGHT = Vec3(1, 0, 0);
+}
+
+//------------------------------------------------------------------------------
+inline Vec3 operator+(const Vec3& a, const Vec3& b)
+{
+    return Vec3(a.x + b.x, a.y + b.y, a.z + b.z);
+}
+
+//------------------------------------------------------------------------------
+inline Vec3 operator-(const Vec3& a)
+{
+    return Vec3(-a.x, -a.y, -a.z);
+}
+
+//------------------------------------------------------------------------------
+inline Vec3 operator-(const Vec3& a, const Vec3& b)
+{
+    return a + (-b);
+}
+
+//------------------------------------------------------------------------------
+inline Vec3 operator*(const Vec3& v, float t)
+{
+    return Vec3(v.x * t, v.y * t, v.z * t);
+}
+
+//------------------------------------------------------------------------------
+inline Vec3 operator*(float t, const Vec3& v)
+{
+    return v * t;
+}
+
+//------------------------------------------------------------------------------
+inline Vec3 operator/(const Vec3& v, float t)
+{
+    return v * (1 / t);
+}
+
+//------------------------------------------------------------------------------
+// Vector 2
+//------------------------------------------------------------------------------
 struct Vec2
 {
     union
@@ -241,6 +346,28 @@ inline Mat44 MakePerspectiveProjection(float fovy, float s, float n, float f)
         0,      g,      0,      0,
         0,      0,      k,      1,
         0,      0,      -n * k, 0
+    );
+}
+
+//------------------------------------------------------------------------------
+inline Mat44 MakeLookAt(const Vec3& pos, const Vec3& target)
+{
+    const Vec3 forward = (target - pos).Normalized();
+    const Vec3 right = math::UP.Cross(forward).Normalized();
+    // No need to normalize, forward and right are perpendicular to each other
+    const Vec3 up = forward.Cross(right);
+
+    // Matrix transforms from world space to camera space. Therefore, we return
+    // the inverse of the camera matrix - negate the translation and multiply by
+    // transposition of the 3x3 rotation matrix.
+    // We first need to translate the vector to -pos and then rotate it, which 
+    // would be done by two matrices, here we have the result of multiplication of
+    // those two matrices
+    return Mat44(
+        Vec4(right.x, up.x, forward.x, 0),
+        Vec4(right.y, up.y, forward.y, 0),
+        Vec4(right.z, up.z, forward.z, 0),
+        Vec4(right.Dot(-pos), up.Dot(-pos), forward.Dot(-pos), 1)
     );
 }
 
