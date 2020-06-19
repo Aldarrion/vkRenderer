@@ -1081,8 +1081,10 @@ void Render::Draw(uint vertexCount, uint firstVertex)
 }
 
 //------------------------------------------------------------------------------
-void Render::Update()
+void Render::Update(float dTime)
 {
+    dTime_ = dTime;
+
     //-------------------
     // Create render pass
     VkRenderPass renderPass{};
@@ -1399,6 +1401,12 @@ uint Render::GetOrCreateVertexLayout(VkPipelineVertexInputStateCreateInfo info)
 
     vertexLayouts_.Add(info);
     return vertexLayouts_.Count() - 1;
+}
+
+//------------------------------------------------------------------------------
+float Render::GetDTime() const
+{
+    return dTime_;
 }
 
 }

@@ -6,6 +6,8 @@
 #include "vkr_Assert.h"
 #include "vkr_Windows.h"
 
+#include <chrono>
+
 //------------------------------------------------------------------------------
 HWND g_hwnd{};
 
@@ -111,6 +113,8 @@ int CALLBACK WinMain(HINSTANCE instance, HINSTANCE prevInstance, LPSTR cmdLine, 
 
     bool shouldQuit = false;
 
+    auto start = std::chrono::high_resolution_clock::now();
+
     MSG msg{};
     while (!shouldQuit)
     {
@@ -125,13 +129,23 @@ int CALLBACK WinMain(HINSTANCE instance, HINSTANCE prevInstance, LPSTR cmdLine, 
                     shouldQuit = true;
                     break;
                 case WM_KEYDOWN:
+                {
+                    // If bit 30 is 1 the key was down even before, and this is just a repeat event
+                    if (msg.lParam & (1 << 30))
+                        break;
+
                     if (msg.wParam == VK_ESCAPE)
                         shouldQuit = true;
+                    vkr::g_Input->KeyDown(msg.wParam);
                     break;
+                }
                 case WM_KEYUP:
+                {
                     if (msg.wParam == VK_F5)
                         vkr::g_Render->ReloadShaders();
+                    vkr::g_Input->KeyUp(msg.wParam);
                     break;
+                }
                 case WM_LBUTTONDOWN:
                     vkr::g_Input->ButtonDown(vkr::BTN_LEFT);
                     break;
@@ -157,8 +171,15 @@ int CALLBACK WinMain(HINSTANCE instance, HINSTANCE prevInstance, LPSTR cmdLine, 
         }
         else
         {
-            vkr::g_Render->Update();
-            
+            auto elapsed = std::chrono::high_resolution_clock::now() - start;
+            start = std::chrono::high_resolution_clock::now();
+
+            float dTime = elapsed.count() / (1000.0f * 1000 * 1000);
+
+            vkr::g_Input->Update();
+
+            vkr::g_Render->Update(dTime);
+
             vkr::g_Input->EndFrame();
         }
     }

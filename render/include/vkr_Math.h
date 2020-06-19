@@ -26,13 +26,13 @@ inline constexpr uint Align(uint x, uint align)
 //------------------------------------------------------------------------------
 inline constexpr float DegToRad(float deg)
 {
-    return (deg / VKR_PI) * 180.0f;
+    return (deg * VKR_PI) / 180.0f;
 }
 
 //------------------------------------------------------------------------------
 inline constexpr float RadToDeg(float rad)
 {
-    return (rad / 180.0f) * VKR_PI;
+    return (rad * 180.0f) / VKR_PI;
 }
 
 //------------------------------------------------------------------------------
@@ -46,9 +46,6 @@ struct Vec4
             float x, y, z, w;
         };
     };
-
-    Vec4() = default;
-    constexpr Vec4(float x, float y, float z, float w) : x(x), y(y), z(z), w(w) {}
 };
 
 //------------------------------------------------------------------------------
@@ -63,9 +60,6 @@ struct Vec3
         };
     };
 
-    Vec3() = default;
-    constexpr Vec3(float x, float y, float z) : x(x), y(y), z(z) {}
-
     constexpr float Dot(const Vec3& b) const
     {
         return 
@@ -76,11 +70,11 @@ struct Vec3
 
     constexpr Vec3 Cross(const Vec3& b) const
     {
-        return Vec3(
+        return Vec3{
             y * b.z - z * b.y,
             z * b.x - x * b.z,
             x * b.y - y * b.x
-        );
+        };
     }
 
     constexpr float LengthSqr() const
@@ -104,30 +98,30 @@ struct Vec3
     Vec3 Normalized() const
     {
         float lenRec = 1.0f / Length();
-        return Vec3(x * lenRec, y * lenRec, z * lenRec);
+        return Vec3{ x * lenRec, y * lenRec, z * lenRec };
     }
 };
 
 namespace math
 {
 //------------------------------------------------------------------------------
-static constexpr Vec3 UP = Vec3(0, 1, 0);
+static constexpr Vec3 UP = Vec3{ 0, 1, 0 };
 //------------------------------------------------------------------------------
-static constexpr Vec3 FORWARD = Vec3(0, 0, 1);
+static constexpr Vec3 FORWARD = Vec3{ 0, 0, 1 };
 //------------------------------------------------------------------------------
-static constexpr Vec3 RIGHT = Vec3(1, 0, 0);
+static constexpr Vec3 RIGHT = Vec3{ 1, 0, 0 };
 }
 
 //------------------------------------------------------------------------------
 inline Vec3 operator+(const Vec3& a, const Vec3& b)
 {
-    return Vec3(a.x + b.x, a.y + b.y, a.z + b.z);
+    return Vec3{ a.x + b.x, a.y + b.y, a.z + b.z };
 }
 
 //------------------------------------------------------------------------------
 inline Vec3 operator-(const Vec3& a)
 {
-    return Vec3(-a.x, -a.y, -a.z);
+    return Vec3{ -a.x, -a.y, -a.z };
 }
 
 //------------------------------------------------------------------------------
@@ -139,7 +133,7 @@ inline Vec3 operator-(const Vec3& a, const Vec3& b)
 //------------------------------------------------------------------------------
 inline Vec3 operator*(const Vec3& v, float t)
 {
-    return Vec3(v.x * t, v.y * t, v.z * t);
+    return Vec3{ v.x * t, v.y * t, v.z * t };
 }
 
 //------------------------------------------------------------------------------
@@ -168,14 +162,35 @@ struct Vec2
         };
     };
 
-    Vec2() = default;
-    Vec2(float x, float y) : x(x), y(y) {}
+    //------------------------------------------------------------------------------
+    Vec2& operator+=(Vec2 other)
+    {
+        x += other.x;
+        y += other.y;
+        return *this;
+    }
+
+    //------------------------------------------------------------------------------
+    Vec2& operator-=(Vec2 other)
+    {
+        x -= other.x;
+        y -= other.y;
+        return *this;
+    }
+
+    //------------------------------------------------------------------------------
+    Vec2& operator*=(float t)
+    {
+        x *= t;
+        y *= t;
+        return *this;
+    }
 };
 
 //------------------------------------------------------------------------------
 inline Vec2 operator*(float f, Vec2 v)
 {
-    return Vec2(v.x * f, v.y * f);
+    return Vec2{ v.x * f, v.y * f };
 }
 
 //------------------------------------------------------------------------------
@@ -187,19 +202,31 @@ inline Vec2 operator*(Vec2 v, float f)
 //------------------------------------------------------------------------------
 inline Vec2 operator+(Vec2 a, Vec2 b)
 {
-    return Vec2(a.x + b.x, a.y + b.y);
+    return Vec2{ a.x + b.x, a.y + b.y };
 }
 
 //------------------------------------------------------------------------------
 inline Vec2 operator-(Vec2 a)
 {
-    return Vec2(-a.x , -a.y);
+    return Vec2{ -a.x , -a.y };
 }
 
 //------------------------------------------------------------------------------
 inline Vec2 operator-(Vec2 a, Vec2 b)
 {
     return a + (-b);
+}
+
+//------------------------------------------------------------------------------
+inline bool operator==(Vec2 a, Vec2 b)
+{
+    return a.x == b.x && a.y == b.y;
+}
+
+//------------------------------------------------------------------------------
+inline bool operator!=(Vec2 a, Vec2 b)
+{
+    return !(a == b);
 }
 
 //------------------------------------------------------------------------------
@@ -216,10 +243,10 @@ struct Mat44
     {
         return Mat44
         (
-            Vec4(1, 0, 0, 0),
-            Vec4(0, 1, 0, 0),
-            Vec4(0, 0, 1, 0),
-            Vec4(0, 0, 0, 1)
+            Vec4{ 1, 0, 0, 0 },
+            Vec4{ 0, 1, 0, 0 },
+            Vec4{ 0, 0, 1, 0 },
+            Vec4{ 0, 0, 0, 1 }
         );
     }
 
@@ -339,7 +366,7 @@ inline Mat44 MakeOrthographicProjection(float l, float r, float t, float b, floa
 //! s = aspect ratio (width / height)
 inline Mat44 MakePerspectiveProjection(float fovy, float s, float n, float f)
 {
-    const float g = -1.0f / tan(fovy * 0.5f);
+    const float g = 1.0f / tan(fovy * 0.5f);
     const float k = f / (f - n);
     return Mat44(
         g / s,  0,      0,      0,
@@ -364,10 +391,10 @@ inline Mat44 MakeLookAt(const Vec3& pos, const Vec3& target)
     // would be done by two matrices, here we have the result of multiplication of
     // those two matrices
     return Mat44(
-        Vec4(right.x, up.x, forward.x, 0),
-        Vec4(right.y, up.y, forward.y, 0),
-        Vec4(right.z, up.z, forward.z, 0),
-        Vec4(right.Dot(-pos), up.Dot(-pos), forward.Dot(-pos), 1)
+        Vec4{ right.x, up.x, forward.x, 0 },
+        Vec4{ right.y, up.y, forward.y, 0 },
+        Vec4{ right.z, up.z, forward.z, 0 },
+        Vec4{ right.Dot(-pos), up.Dot(-pos), forward.Dot(-pos), 1 }
     );
 }
 

@@ -58,7 +58,7 @@ void DrawCanvas::Draw()
     {
         for (int i = 0; i < points_.Count(); ++i)
         {
-            verts[i].position_ = Vec4(points_[i].x, points_[i].y, 0, 0);
+            verts[i].position_ = Vec4{ points_[i].x, points_[i].y, 0, 0 };
             verts[i].color_ = 0xff2222dd;
         }
         vertsToDraw = points_.Count();
@@ -73,8 +73,8 @@ void DrawCanvas::Draw()
         {
             Vec2 p0 = points_[i];
             Vec2 p1 = points_[i + 1];
-            Vec2 m0 = i == 0 ? Vec2(0, 0) : p1 - points_[i - 1];
-            Vec2 m1 = i == points_.Count() - 2 ? Vec2(0, 0) : points_[i + 2] - p0;
+            Vec2 m0 = i == 0 ? Vec2{} : p1 - points_[i - 1];
+            Vec2 m1 = i == points_.Count() - 2 ? Vec2{} : points_[i + 2] - p0;
 
             for (int j = 0; j <= tesselLevel; ++j)
             {
@@ -87,7 +87,7 @@ void DrawCanvas::Draw()
                     + (-2 * t3 + 3 * t2) * p1
                     + (t3 - t2) * m1;
 
-                verts[i * tesselLevel + j].position_ = Vec4(pos.x, pos.y, 0, 0);
+                verts[i * tesselLevel + j].position_ = Vec4{ pos.x, pos.y, 0, 0 };
                 verts[i * tesselLevel + j].color_ = 0xff2222dd;
             }
         }

@@ -106,7 +106,7 @@ public:
     // Drawing
     void Draw(uint vertexCount, uint firstVertex);
 
-    void Update();
+    void Update(float dTime);
 
     VkDevice GetDevice() const;
     VmaAllocator GetAllocator() const;
@@ -136,6 +136,8 @@ public:
     //----------------------
     // Vertex layout manager
     uint GetOrCreateVertexLayout(VkPipelineVertexInputStateCreateInfo info);
+
+    float GetDTime() const;
 
 private:
     static constexpr auto VK_VERSION = VK_API_VERSION_1_1;
@@ -246,6 +248,10 @@ private:
     //----------------------
     // Camera
     Mat44 cameraMatrix_ = Mat44::Identity();
+
+    //----------------------
+    // Time
+    float dTime_{};
 };
 
 

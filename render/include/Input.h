@@ -3,6 +3,7 @@
 #include "Config.h"
 #include "Types.h"
 #include "Enums.h"
+#include "Array.h"
 
 #include "vkr_Math.h"
 
@@ -27,26 +28,49 @@ enum MouseButton
 };
 
 //------------------------------------------------------------------------------
+enum class MouseMode
+{
+    Absolute,
+    Relative,
+};
+
+//------------------------------------------------------------------------------
+template<class KeyT, class DataT>
+struct Pair
+{
+    KeyT    Key;
+    DataT   Data;
+};
+
+//------------------------------------------------------------------------------
 class Input
 {
 public:
     RESULT InitWin32(HWND hwnd);
 
+    void Update();
     void EndFrame();
 
     Vec2 GetMousePos() const;
 
-    bool IsKeyDown() const;
+    bool IsKeyDown(int keyCode) const;
+    bool IsKeyUp(int keyCode) const;
+    
+    // For both keys and buttons
+    bool GetState(int keyCode) const;
+
+    void KeyDown(int key);
+    void KeyUp(int key);
+
     bool IsButtonDown(MouseButton button) const;
-
-    bool IsKeyUp() const;
     bool IsButtonUp(MouseButton button) const;
-
-    void KeyDown(uint64 key);
-    void KeyUp(uint64 key);
 
     void ButtonDown(MouseButton button);
     void ButtonUp(MouseButton button);
+
+    void SetMouseMode(MouseMode mode);
+
+    Vec2 GetMouseDelta() const;
 
 private:
     // Win32
@@ -60,6 +84,14 @@ private:
     };
 
     ButtonState buttons_[BTN_COUNT]{};
+
+    Array<int> keysDown_;
+    Array<int> keysUp_;
+
+    MouseMode mouseMode_{};
+    Vec2 mouseDelta_{};
+
+    void CenterCursor();
 };
 
 }
