@@ -9,6 +9,7 @@
 #include "Types.h"
 #include "Array.h"
 #include "VkTypes.h"
+#include "Camera.h"
 
 #include "vkr_Math.h"
 #include "vkr_Windows.h"
@@ -133,6 +134,8 @@ public:
     uint GetHeight() const;
     float GetAspect() const;
 
+    const Camera& GetCamera() const;
+
     //----------------------
     // Vertex layout manager
     uint GetOrCreateVertexLayout(VkPipelineVertexInputStateCreateInfo info);
@@ -247,7 +250,7 @@ private:
 
     //----------------------
     // Camera
-    Mat44 cameraMatrix_ = Mat44::Identity();
+    Camera camera_{};
 
     //----------------------
     // Time

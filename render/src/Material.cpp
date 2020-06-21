@@ -137,66 +137,9 @@ RESULT PhongMaterial::Init()
     return R_OK;
 }
 
-Vec3 cameraPosition{ 0, 0, 0 };
-Vec3 cameraForward{ math::FORWARD };
-Vec3 cameraRight{ math::RIGHT };
-
-Vec2 angles{ 0, 90 };
-float speed = 10;
-
-//------------------------------------------------------------------------------
-void UpdateCameraVectors()
-{
-    if (angles.x > 89.0f)
-        angles.x = 89;
-    else if (angles.x < -89.0f)
-        angles.x = -89;
-
-    cameraForward.x = cos(DegToRad(angles.y)) * cos(DegToRad(angles.x));
-    cameraForward.y = sin(DegToRad(angles.x));
-    cameraForward.z = sin(DegToRad(angles.y)) * cos(DegToRad(angles.x));
-
-    cameraRight = math::UP.Cross(cameraForward).Normalized();
-}
-
 //------------------------------------------------------------------------------
 void PhongMaterial::Draw()
 {
-    if (g_Input->GetState(VK_RBUTTON))
-    {
-        g_Input->SetMouseMode(MouseMode::Relative);
-        Vec2 mouseDelta = g_Input->GetMouseDelta();
-        angles.x -= mouseDelta.y * 0.1f;
-        angles.y -= mouseDelta.x * 0.1f;
-        
-        if (mouseDelta != Vec2{})
-        {
-            UpdateCameraVectors();
-        }
-    }
-    else
-    {
-        g_Input->SetMouseMode(MouseMode::Absolute);
-    }
-
-    if (g_Input->GetState('W'))
-    {
-        cameraPosition = cameraPosition + cameraForward * speed * g_Render->GetDTime();
-    }
-    else if (g_Input->GetState('S'))
-    {
-        cameraPosition = cameraPosition - cameraForward * speed * g_Render->GetDTime();
-    }
-    
-    if (g_Input->GetState('D'))
-    {
-        cameraPosition = cameraPosition + cameraRight * speed * g_Render->GetDTime();
-    }
-    else if (g_Input->GetState('A'))
-    {
-        cameraPosition = cameraPosition - cameraRight * speed * g_Render->GetDTime();
-    }
-
     struct MatrixUBO
     {
         Mat44 projection;
@@ -204,20 +147,13 @@ void PhongMaterial::Draw()
 
     void* mapped;
     DynamicUBOEntry constBuffer = g_Render->GetUBOCache()->BeginAlloc(sizeof(MatrixUBO), &mapped);
-
     auto ubo = (MatrixUBO*)mapped;
-    float extent = 20;
-    //ubo->projection = MakeOrthographicProjection(-extent, extent, -extent / g_Render->GetAspect(), extent / g_Render->GetAspect(), 0.1f, 1000);
-    ubo->projection = MakePerspectiveProjection(DegToRad(75), g_Render->GetAspect(), 0.1f, 100);
 
-    Mat44 lookAt = MakeLookAt(cameraPosition, cameraPosition + cameraForward);
-
-    ubo->projection = lookAt * ubo->projection;
-
+    ubo->projection = g_Render->GetCamera().ToCamera() * g_Render->GetCamera().ToProjection();
+    
     g_Render->GetUBOCache()->EndAlloc();
 
     g_Render->SetDynamicUbo(1, &constBuffer);
-
 
     g_Render->SetShader<PS_VERT>(phongVert_);
     g_Render->SetShader<PS_FRAG>(phongFrag_);

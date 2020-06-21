@@ -1085,6 +1085,8 @@ void Render::Update(float dTime)
 {
     dTime_ = dTime;
 
+    camera_.Update();
+
     //-------------------
     // Create render pass
     VkRenderPass renderPass{};
@@ -1301,6 +1303,12 @@ uint Render::GetHeight() const
 float Render::GetAspect() const
 {
     return 1.0f * width_ / height_;
+}
+
+//------------------------------------------------------------------------------
+const Camera& Render::GetCamera() const
+{
+    return camera_;
 }
 
 //------------------------------------------------------------------------------

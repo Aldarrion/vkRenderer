@@ -60,14 +60,16 @@ struct Vec3
         };
     };
 
+    //------------------------------------------------------------------------------
     constexpr float Dot(const Vec3& b) const
     {
-        return 
+        return
             x * b.x
             + y * b.y
             + z * b.z;
     }
 
+    //------------------------------------------------------------------------------
     constexpr Vec3 Cross(const Vec3& b) const
     {
         return Vec3{
@@ -77,16 +79,19 @@ struct Vec3
         };
     }
 
+    //------------------------------------------------------------------------------
     constexpr float LengthSqr() const
     {
         return Dot(*this);
     }
 
+    //------------------------------------------------------------------------------
     float Length() const
     {
         return sqrt(LengthSqr());
     }
 
+    //------------------------------------------------------------------------------
     void Normalize()
     {
         float lenRec = 1.0f / Length();
@@ -95,10 +100,38 @@ struct Vec3
         z *= lenRec;
     }
 
+    //------------------------------------------------------------------------------
     Vec3 Normalized() const
     {
         float lenRec = 1.0f / Length();
         return Vec3{ x * lenRec, y * lenRec, z * lenRec };
+    }
+
+    //------------------------------------------------------------------------------
+    Vec3& operator+=(const Vec3& other)
+    {
+        x += other.x;
+        y += other.y;
+        z += other.z;
+        return *this;
+    }
+
+    //------------------------------------------------------------------------------
+    Vec3& operator-=(const Vec3& other)
+    {
+        x -= other.x;
+        y -= other.y;
+        z -= other.z;
+        return *this;
+    }
+
+    //------------------------------------------------------------------------------
+    Vec3& operator*=(float t)
+    {
+        x *= t;
+        y *= t;
+        z *= t;
+        return *this;
     }
 };
 
