@@ -11,6 +11,7 @@ class Camera
 public:
     const Mat44& ToCamera() const;
     const Mat44& ToProjection() const;
+    const Vec3& Position() const;
 
     void Update();
 
@@ -19,8 +20,8 @@ private:
     Mat44 projection_;
 
     Vec3 pos_{ 0, 0, 0 };
-    Vec3 forward_{ math::FORWARD };
-    Vec3 right_{ math::RIGHT };
+    Vec3 forward_{Vec3::FORWARD() };
+    Vec3 right_{ Vec3::RIGHT() };
 
     Vec2 angles_{ 0, 90 };
     float speed_{ 20 };

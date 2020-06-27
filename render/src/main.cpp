@@ -123,6 +123,10 @@ int CALLBACK WinMain(HINSTANCE instance, HINSTANCE prevInstance, LPSTR cmdLine, 
             TranslateMessage(&msg);
             DispatchMessage(&msg);
 
+            auto hw = GetForegroundWindow();
+            if (GetForegroundWindow() != g_hwnd)
+                continue;
+
             switch (msg.message)
             {
                 case WM_QUIT:

@@ -440,6 +440,18 @@ RESULT Render::InitWin32(HWND hwnd, HINSTANCE hinst)
     vkGetDeviceQueue(vkDevice_, directQueueFamilyIdx_, 0, &vkDirectQueue_);
 
     //-----------------------
+    // Allocator
+    {
+        VmaAllocatorCreateInfo allocatorInfo{};
+        allocatorInfo.instance          = vkInstance_;
+        allocatorInfo.physicalDevice    = vkPhysicalDevice_;
+        allocatorInfo.device            = vkDevice_;
+
+        if (VKR_FAILED(vmaCreateAllocator(&allocatorInfo, &allocator_)))
+            return R_FAIL;
+    }
+
+    //-----------------------
     // Create swapchain
     VkBool32 presentSupport{};
     if (VKR_FAILED(vkGetPhysicalDeviceSurfaceSupportKHR(vkPhysicalDevice_, directQueueFamilyIdx_, vkSurface_, &presentSupport)))
@@ -585,8 +597,41 @@ RESULT Render::InitWin32(HWND hwnd, HINSTANCE hinst)
         
         if (VKR_FAILED(SetDiagName(vkDevice_, (uint64)bbImages_[i], VK_OBJECT_TYPE_IMAGE, "BackBuffer")))
             return R_FAIL;
-    }
 
+        VkImageCreateInfo depthImageInfo{};
+        depthImageInfo.sType            = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
+        depthImageInfo.imageType        = VK_IMAGE_TYPE_2D;
+        depthImageInfo.format           = VK_FORMAT_D24_UNORM_S8_UINT;
+        depthImageInfo.extent           = VkExtent3D{ width_, height_, 1 };
+        depthImageInfo.mipLevels        = 1;
+        depthImageInfo.arrayLayers      = 1;
+        depthImageInfo.samples          = VK_SAMPLE_COUNT_1_BIT;
+        depthImageInfo.tiling           = VK_IMAGE_TILING_OPTIMAL;
+        depthImageInfo.usage            = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
+        depthImageInfo.sharingMode      = VK_SHARING_MODE_EXCLUSIVE;
+        depthImageInfo.initialLayout    = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+
+        VmaAllocationCreateInfo depthAllocInfo{};
+        depthAllocInfo.usage            = VMA_MEMORY_USAGE_GPU_ONLY;
+
+        if (VKR_FAILED(vmaCreateImage(allocator_, &depthImageInfo, &depthAllocInfo, &depthImages_[i], &depthMemory_[i], nullptr)))
+            return R_FAIL;
+
+        VkImageViewCreateInfo depthViewInfo{};
+        depthViewInfo.sType               = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+        depthViewInfo.image               = depthImages_[i];
+        depthViewInfo.viewType            = VK_IMAGE_VIEW_TYPE_2D;
+        depthViewInfo.format              = VK_FORMAT_D24_UNORM_S8_UINT;
+        
+        depthViewInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT;
+        depthViewInfo.subresourceRange.baseMipLevel = 0;
+        depthViewInfo.subresourceRange.levelCount = 1;
+        depthViewInfo.subresourceRange.baseArrayLayer = 0;
+        depthViewInfo.subresourceRange.layerCount = 1;
+
+        if (VKR_FAILED(vkCreateImageView(vkDevice_, &depthViewInfo, nullptr, &depthViews_[i])))
+            return R_FAIL;
+    }
 
     //-----------------------
     // Create command pools and buffers
@@ -772,18 +817,6 @@ RESULT Render::InitWin32(HWND hwnd, HINSTANCE hinst)
             if (VKR_FAILED(vkCreateDescriptorPool(vkDevice_, &dynamicUbo, nullptr, &dynamicUBODPool_[i])))
                 return R_FAIL;
         }
-    }
-
-    //-----------------------
-    // Allocator
-    {
-        VmaAllocatorCreateInfo allocatorInfo{};
-        allocatorInfo.instance          = vkInstance_;
-        allocatorInfo.physicalDevice    = vkPhysicalDevice_;
-        allocatorInfo.device            = vkDevice_;
-
-        if (VKR_FAILED(vmaCreateAllocator(&allocatorInfo, &allocator_)))
-            return R_FAIL;
     }
 
     //-----------------------
@@ -1105,7 +1138,7 @@ void Render::Update(float dTime)
         colorAttachmentRef.attachment   = 0;
         colorAttachmentRef.layout       = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
 
-        /*VkAttachmentDescription depthAttachment{};
+        VkAttachmentDescription depthAttachment{};
         depthAttachment.format          = VK_FORMAT_D16_UNORM;
         depthAttachment.samples         = VK_SAMPLE_COUNT_1_BIT;
         depthAttachment.loadOp          = VK_ATTACHMENT_LOAD_OP_CLEAR;
@@ -1117,13 +1150,13 @@ void Render::Update(float dTime)
 
         VkAttachmentReference depthAttachmentRef{};
         depthAttachmentRef.attachment   = 1;
-        depthAttachmentRef.layout       = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;*/
+        depthAttachmentRef.layout       = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
 
         VkSubpassDescription subpass{};
         subpass.pipelineBindPoint       = VK_PIPELINE_BIND_POINT_GRAPHICS;
         subpass.colorAttachmentCount    = 1;
         subpass.pColorAttachments       = &colorAttachmentRef;
-        //subpass.pDepthStencilAttachment = &depthAttachmentRef;
+        subpass.pDepthStencilAttachment = &depthAttachmentRef;
 
         /*VkSubpassDependency dependency{};
         dependency.srcSubpass       = VK_SUBPASS_EXTERNAL;
@@ -1133,7 +1166,7 @@ void Render::Update(float dTime)
         dependency.dstStageMask     = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
         dependency.dstAccessMask    = VK_ACCESS_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;*/
 
-        VkAttachmentDescription attachments[1] = { colorAttachment };
+        VkAttachmentDescription attachments[] = { colorAttachment, depthAttachment };
         VkRenderPassCreateInfo renderPassInfo{};
         renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
         renderPassInfo.attachmentCount = vkr_arr_len(attachments);
@@ -1154,11 +1187,13 @@ void Render::Update(float dTime)
     // Create framebuffer
     VkFramebuffer frameBuffer{};
     {
+        VkImageView viewAttachments[] = { bbViews_[currentBBIdx_], depthViews_[currentBBIdx_] };
+
         VkFramebufferCreateInfo framebufferInfo{};
         framebufferInfo.sType           = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
         framebufferInfo.renderPass      = renderPass;
-        framebufferInfo.attachmentCount = 1;
-        framebufferInfo.pAttachments    = &bbViews_[currentBBIdx_];
+        framebufferInfo.attachmentCount = vkr_arr_len(viewAttachments);
+        framebufferInfo.pAttachments    = viewAttachments;
         framebufferInfo.width           = width_;
         framebufferInfo.height          = height_;
         framebufferInfo.layers          = 1;
@@ -1170,14 +1205,17 @@ void Render::Update(float dTime)
         frameBuffer_[currentBBIdx_] = frameBuffer;
     }
 
-    VkClearValue clearVal{ VkClearColorValue { 0.2f, 0.6f, 0.2f, 1.0f } };
+    VkClearValue clearVal[2] = {};
+    clearVal[0].color = VkClearColorValue { 0.1f, 0.1f, 0.7f, 1.0f };
+    clearVal[1].depthStencil =  VkClearDepthStencilValue { 1, 0 };
+
     VkRenderPassBeginInfo renderPassBeginInfo{};
     renderPassBeginInfo.sType           = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
     renderPassBeginInfo.renderPass      = renderPass;
     renderPassBeginInfo.framebuffer     = frameBuffer;
     renderPassBeginInfo.renderArea      = VkRect2D { VkOffset2D { 0, 0 }, VkExtent2D { width_, height_ } };
-    renderPassBeginInfo.clearValueCount = 1;
-    renderPassBeginInfo.pClearValues    = &clearVal;
+    renderPassBeginInfo.clearValueCount = vkr_arr_len(clearVal);
+    renderPassBeginInfo.pClearValues    = clearVal;
 
     vkCmdBeginRenderPass(directCmdBuffers_[currentBBIdx_], &renderPassBeginInfo, VK_SUBPASS_CONTENTS_INLINE);
 

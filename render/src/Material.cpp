@@ -140,16 +140,18 @@ RESULT PhongMaterial::Init()
 //------------------------------------------------------------------------------
 void PhongMaterial::Draw()
 {
-    struct MatrixUBO
+    struct SceneData
     {
-        Mat44 projection;
+        Mat44   Projection;
+        Vec4    ViewPos;
     };
 
     void* mapped;
-    DynamicUBOEntry constBuffer = g_Render->GetUBOCache()->BeginAlloc(sizeof(MatrixUBO), &mapped);
-    auto ubo = (MatrixUBO*)mapped;
+    DynamicUBOEntry constBuffer = g_Render->GetUBOCache()->BeginAlloc(sizeof(SceneData), &mapped);
+    auto ubo = (SceneData*)mapped;
 
-    ubo->projection = g_Render->GetCamera().ToCamera() * g_Render->GetCamera().ToProjection();
+    ubo->Projection = g_Render->GetCamera().ToCamera() * g_Render->GetCamera().ToProjection();
+    ubo->ViewPos    = g_Render->GetCamera().Position().ToVec4();
     
     g_Render->GetUBOCache()->EndAlloc();
 
@@ -158,7 +160,7 @@ void PhongMaterial::Draw()
     g_Render->SetShader<PS_VERT>(phongVert_);
     g_Render->SetShader<PS_FRAG>(phongFrag_);
 
-    g_Render->Draw(3, 0);
+    g_Render->Draw(3 * 12, 0);
 }
 
 }

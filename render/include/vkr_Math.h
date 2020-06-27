@@ -61,6 +61,24 @@ struct Vec3
     };
 
     //------------------------------------------------------------------------------
+    static constexpr Vec3 UP()
+    {
+        return Vec3{ 0, 1, 0 };
+    }
+
+    //------------------------------------------------------------------------------
+    static constexpr Vec3 FORWARD()
+    {
+        return Vec3{ 0, 0, 1 };
+    }
+
+    //------------------------------------------------------------------------------
+    static constexpr Vec3 RIGHT()
+    {
+        return Vec3{ 1, 0, 0 };
+    }
+
+    //------------------------------------------------------------------------------
     constexpr float Dot(const Vec3& b) const
     {
         return
@@ -133,17 +151,13 @@ struct Vec3
         z *= t;
         return *this;
     }
-};
 
-namespace math
-{
-//------------------------------------------------------------------------------
-static constexpr Vec3 UP = Vec3{ 0, 1, 0 };
-//------------------------------------------------------------------------------
-static constexpr Vec3 FORWARD = Vec3{ 0, 0, 1 };
-//------------------------------------------------------------------------------
-static constexpr Vec3 RIGHT = Vec3{ 1, 0, 0 };
-}
+    //------------------------------------------------------------------------------
+    Vec4 ToVec4() const
+    {
+        return Vec4{ x, y, z, 1 };
+    }
+};
 
 //------------------------------------------------------------------------------
 inline Vec3 operator+(const Vec3& a, const Vec3& b)
@@ -413,7 +427,7 @@ inline Mat44 MakePerspectiveProjection(float fovy, float s, float n, float f)
 inline Mat44 MakeLookAt(const Vec3& pos, const Vec3& target)
 {
     const Vec3 forward = (target - pos).Normalized();
-    const Vec3 right = math::UP.Cross(forward).Normalized();
+    const Vec3 right = Vec3::UP().Cross(forward).Normalized();
     // No need to normalize, forward and right are perpendicular to each other
     const Vec3 up = forward.Cross(right);
 

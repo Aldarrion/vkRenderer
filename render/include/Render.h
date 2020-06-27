@@ -174,6 +174,10 @@ private:
     VkImageView         bbViews_[BB_IMG_COUNT]{};
     VkFormat            swapChainFormat_{};
 
+    VkImage             depthImages_[BB_IMG_COUNT]{};
+    VmaAllocation       depthMemory_[BB_IMG_COUNT]{};
+    VkImageView         depthViews_[BB_IMG_COUNT]{};
+
     uint64              frame_{};
 
     // Synchronization

@@ -18,13 +18,14 @@ void Camera::UpdateCameraVectors()
     forward_.y = sin(DegToRad(angles_.x));
     forward_.z = sin(DegToRad(angles_.y)) * cos(DegToRad(angles_.x));
 
-    right_ = math::UP.Cross(forward_).Normalized();
+    right_ = Vec3::UP().Cross(forward_).Normalized();
 }
 
 //------------------------------------------------------------------------------
 void Camera::Update()
 {
-    if (g_Input->GetState(VK_RBUTTON))
+    bool isMoveMode = g_Input->GetState(VK_RBUTTON);
+    if (isMoveMode)
     {
         g_Input->SetMouseMode(MouseMode::Relative);
         Vec2 mouseDelta = g_Input->GetMouseDelta();
@@ -41,26 +42,38 @@ void Camera::Update()
         g_Input->SetMouseMode(MouseMode::Absolute);
     }
 
-    if (g_Input->GetState('W'))
+    if (isMoveMode)
     {
-        pos_ += forward_ * speed_ * g_Render->GetDTime();
-    }
-    else if (g_Input->GetState('S'))
-    {
-        pos_ -= forward_ * speed_ * g_Render->GetDTime();
-    }
+        if (g_Input->GetState('W'))
+        {
+            pos_ += forward_ * speed_ * g_Render->GetDTime();
+        }
+        else if (g_Input->GetState('S'))
+        {
+            pos_ -= forward_ * speed_ * g_Render->GetDTime();
+        }
     
-    if (g_Input->GetState('D'))
-    {
-        pos_ += right_ * speed_ * g_Render->GetDTime();
-    }
-    else if (g_Input->GetState('A'))
-    {
-        pos_ -= right_ * speed_ * g_Render->GetDTime();
+        if (g_Input->GetState('D'))
+        {
+            pos_ += right_ * speed_ * g_Render->GetDTime();
+        }
+        else if (g_Input->GetState('A'))
+        {
+            pos_ -= right_ * speed_ * g_Render->GetDTime();
+        }
+
+        if (g_Input->GetState('Q'))
+        {
+            pos_ += Vec3::UP() * speed_ * g_Render->GetDTime();
+        }
+        else if (g_Input->GetState('E'))
+        {
+            pos_ -= Vec3::UP() * speed_ * g_Render->GetDTime();
+        }
     }
 
     float extent = 20;
-    //ubo->projection = MakeOrthographicProjection(-extent, extent, -extent / g_Render->GetAspect(), extent / g_Render->GetAspect(), 0.1f, 1000);
+    //projection_ = MakeOrthographicProjection(-extent, extent, -extent / g_Render->GetAspect(), extent / g_Render->GetAspect(), 0.1f, 1000);
     projection_ = MakePerspectiveProjection(DegToRad(fovy_), g_Render->GetAspect(), near_, far_);
 
     toCamera_ = MakeLookAt(pos_, pos_ + forward_);
@@ -76,6 +89,12 @@ const Mat44& Camera::ToCamera() const
 const Mat44& Camera::ToProjection() const
 {
     return projection_;
+}
+
+//------------------------------------------------------------------------------
+const Vec3& Camera::Position() const
+{
+    return pos_;
 }
 
 }
