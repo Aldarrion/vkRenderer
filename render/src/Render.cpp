@@ -863,7 +863,7 @@ RESULT Render::InitWin32(HWND hwnd, HINSTANCE hinst)
     //-----------------------
     // Material allocation
     materials_.Add(new SkyboxMaterial());
-    //materials_.Add(new TexturedTriangleMaterial());
+    materials_.Add(new TexturedTriangleMaterial());
     //materials_.Add(new ShapeMaterial());
     materials_.Add(new PhongMaterial());
     
