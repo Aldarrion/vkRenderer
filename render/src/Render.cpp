@@ -660,6 +660,7 @@ RESULT Render::InitWin32(HWND hwnd, HINSTANCE hinst)
 
     //-----------------------
     // Pipeline layout
+    // Basic point
     VkSamplerCreateInfo pointClampInfo{};
     pointClampInfo.sType         = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
     pointClampInfo.magFilter     = VK_FILTER_NEAREST;
@@ -673,17 +674,38 @@ RESULT Render::InitWin32(HWND hwnd, HINSTANCE hinst)
     VkSampler pointClamp{};
     if (VKR_FAILED(vkCreateSampler(vkDevice_, &pointClampInfo, nullptr, &pointClamp)))
         return R_FAIL;
-    
-    VkSampler samplers[IMMUTABLE_SAMPLER_COUNT] = {
+
+    VkSampler immutableSamplers[IMMUTABLE_SAMPLER_COUNT] = {
         pointClamp
     };
 
-    VkDescriptorSetLayoutBinding bindings[1]{};
+    // Skybox sampler
+    VkSamplerCreateInfo skyboxSampInfo{};
+    skyboxSampInfo.sType         = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
+    skyboxSampInfo.magFilter     = VK_FILTER_LINEAR;
+    skyboxSampInfo.minFilter     = VK_FILTER_LINEAR;
+    skyboxSampInfo.mipmapMode    = VK_SAMPLER_MIPMAP_MODE_NEAREST;
+    skyboxSampInfo.addressModeU  = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+    skyboxSampInfo.addressModeV  = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+    skyboxSampInfo.addressModeW  = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+    skyboxSampInfo.maxLod        = FLT_MAX;
+
+    VkSampler skyboxSampler{};
+    if (VKR_FAILED(vkCreateSampler(vkDevice_, &skyboxSampInfo, nullptr, &skyboxSampler)))
+        return R_FAIL;
+    
+    VkDescriptorSetLayoutBinding bindings[2]{};
     bindings[0].binding             = 0;
     bindings[0].descriptorType      = VK_DESCRIPTOR_TYPE_SAMPLER;
     bindings[0].descriptorCount     = IMMUTABLE_SAMPLER_COUNT;
     bindings[0].stageFlags          = VK_SHADER_STAGE_FRAGMENT_BIT;
-    bindings[0].pImmutableSamplers  = samplers;
+    bindings[0].pImmutableSamplers  = immutableSamplers;
+
+    bindings[1].binding             = 32;
+    bindings[1].descriptorType      = VK_DESCRIPTOR_TYPE_SAMPLER;
+    bindings[1].descriptorCount     = 1;
+    bindings[1].stageFlags          = VK_SHADER_STAGE_FRAGMENT_BIT;
+    bindings[1].pImmutableSamplers  = &skyboxSampler;
 
     VkDescriptorSetLayoutCreateInfo dsLayoutInfo{};
     dsLayoutInfo.sType          = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
@@ -840,6 +862,7 @@ RESULT Render::InitWin32(HWND hwnd, HINSTANCE hinst)
 
     //-----------------------
     // Material allocation
+    materials_.Add(new SkyboxMaterial());
     //materials_.Add(new TexturedTriangleMaterial());
     //materials_.Add(new ShapeMaterial());
     materials_.Add(new PhongMaterial());
@@ -959,8 +982,8 @@ RESULT Render::PrepareForDraw()
     VkPipelineDepthStencilStateCreateInfo depthStencil{};
     {
         depthStencil.sType              = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
-        depthStencil.depthTestEnable    = VK_TRUE;
-        depthStencil.depthWriteEnable   = VK_TRUE;
+        depthStencil.depthTestEnable    = (state_.depthState_ & DS_TEST) ? VK_TRUE : VK_FALSE;
+        depthStencil.depthWriteEnable   = (state_.depthState_ & DS_WRITE) ? VK_TRUE : VK_FALSE;;
         depthStencil.depthCompareOp     = VK_COMPARE_OP_LESS;
     }
 
@@ -1390,6 +1413,12 @@ void Render::SetDynamicUbo(uint slot, DynamicUBOEntry* entry)
 }
 
 //------------------------------------------------------------------------------
+void Render::SetDepthState(uint state)
+{
+    state_.depthState_ = state;
+}
+
+//------------------------------------------------------------------------------
 uint Render::AddBindlessTexture(VkImageView view)
 {
     VkDescriptorImageInfo imgInfo{};
@@ -1434,6 +1463,7 @@ void RenderState::Reset()
     primitiveTopology_ = VkrPrimitiveTopology::TRIANGLE_LIST;
     
     cullMode_ = VkrCullMode::Back;
+    depthState_ = DS_TEST | DS_WRITE;
 }
 
 //------------------------------------------------------------------------------

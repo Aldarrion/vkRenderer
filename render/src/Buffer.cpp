@@ -15,7 +15,6 @@ StagingBuffer::StagingBuffer(uint size)
 //------------------------------------------------------------------------------
 RESULT StagingBuffer::Allocate(void* data)
 {
-
     // Create the buffer
     VkBufferCreateInfo bufferInfo{};
     bufferInfo.sType        = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;

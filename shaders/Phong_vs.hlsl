@@ -1,5 +1,5 @@
 
-static const float3 TriangleVerts[] =
+static const float3 CubeVerts[] =
 {
     float3(-1.0, 1.0, -1.0),
     float3(1.0, 1.0, -1.0),
@@ -27,7 +27,7 @@ static const float3 TriangleVerts[] =
     float3(-1.0, 1.0, 1.0),
 };
 
-static const float3 TriangleNormals[] = 
+static const float3 CubeNormals[] = 
 {
     float3(0.0, 1.0, 0.0),
     float3(0.0, 1.0, 0.0),
@@ -55,7 +55,7 @@ static const float3 TriangleNormals[] =
     float3(0.0, 0.0, 1.0),
 };
 
-static const float3 TriangleColors[] = 
+static const float3 CubeColors[] = 
 {
     float3(0.2, 1.0, 0.0),
     float3(0.2, 1.0, 0.0),
@@ -83,7 +83,7 @@ static const float3 TriangleColors[] =
     float3(1.0, 0.2, 0.0),
 };
 
-static const uint TriangleIndices[] = 
+static const uint CubeIndices[] = 
 {
     3, 1, 0,
     2, 1, 3,
@@ -114,7 +114,7 @@ struct vs_out
 
 struct Vec
 {
-    float4x4    Projection;
+    float4x4    VP;
     float4      ViewPos;
 };
 
@@ -131,12 +131,12 @@ vs_out main(uint vertID : SV_VERTEXID)
 
     vs_out o = vs_out(0);
 
-    float4 pos = float4(TriangleVerts[TriangleIndices[vertID]], 1);
-    o.Pos = pos * model * View.Projection;
+    float4 pos = float4(CubeVerts[CubeIndices[vertID]], 1);
+    o.Pos = pos * model * View.VP;
     o.WorldPos = (pos * model).xyz;
 
-    o.Color = TriangleColors[TriangleIndices[vertID]];
-    o.Normal = normalize(TriangleNormals[TriangleIndices[vertID]]);
+    o.Color = CubeColors[CubeIndices[vertID]];
+    o.Normal = normalize(CubeNormals[CubeIndices[vertID]]);
 
     return o;
 }

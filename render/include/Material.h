@@ -59,4 +59,18 @@ private:
     Shader*         phongFrag_{};
 };
 
+//------------------------------------------------------------------------------
+class SkyboxMaterial : public Material
+{
+public:
+    RESULT Init() override;
+    void Draw() override;
+
+private:
+    Shader*     skyboxVert_{};
+    Shader*     skyboxFrag_{};
+
+    Texture*    skyboxCubemap_{};
+};
+
 }

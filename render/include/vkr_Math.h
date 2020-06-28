@@ -297,7 +297,17 @@ struct Mat44
         );
     }
 
-    float m[4][4];
+    union
+    {
+        float m[4][4];
+        struct
+        {
+            Vec4 a;
+            Vec4 b;
+            Vec4 c;
+            Vec4 pos;
+        };
+    };
 
     //------------------------------------------------------------------------------
     Mat44() = default;
@@ -340,6 +350,12 @@ struct Mat44
     constexpr float& operator()(int i, int j)
     {
         return m[i][j];
+    }
+
+    //------------------------------------------------------------------------------
+    void SetPosition(const Vec3& position)
+    {
+        pos = Vec4{ position.x, position.y, position.z, 1 };
     }
 };
 

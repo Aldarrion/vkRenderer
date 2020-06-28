@@ -56,6 +56,13 @@ struct DynamicUBOEntry;
 class DrawCanvas;
 
 //------------------------------------------------------------------------------
+enum DepthState
+{
+    DS_TEST = 1,
+    DS_WRITE = 2,
+};
+
+//------------------------------------------------------------------------------
 struct RenderState
 {
     static constexpr uint MAX_CONST_BUFF = 1;
@@ -80,6 +87,8 @@ struct RenderState
     VkrPrimitiveTopology    primitiveTopology_{};
     VkrCullMode             cullMode_{};
 
+    uint                    depthState_{ DS_TEST | DS_WRITE};
+
     void Reset();
 };
 
@@ -103,6 +112,7 @@ public:
     void SetVertexLayout(uint slot, uint layoutHandle);
     void SetPrimitiveTopology(VkrPrimitiveTopology primitiveTopology);
     void SetDynamicUbo(uint slot, DynamicUBOEntry* entry);
+    void SetDepthState(uint state);
 
     // Drawing
     void Draw(uint vertexCount, uint firstVertex);

@@ -10,9 +10,15 @@ namespace vkr
 class Texture
 {
 public:
-    Texture(VkFormat format, VkExtent3D size);
+    enum class Type
+    {
+        TEX_2D,
+        TEX_CUBE,
+    };
 
-    RESULT Allocate(void* data, const char* diagName = nullptr);
+    Texture(VkFormat format, VkExtent3D size, Type type);
+
+    RESULT Allocate(void** data, const char* diagName = nullptr);
     void Free();
 
     VkImageView GetView() const;
@@ -26,6 +32,7 @@ private:
 
     VkImageView     srv_;
     uint            bindlessIdx_;
+    Type            type_;
 };
 
 }

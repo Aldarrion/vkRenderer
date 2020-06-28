@@ -21,9 +21,9 @@ RESULT TexturedTriangleMaterial::Init()
         int texWidth, texHeight, texChannels;
         stbi_uc* pixels = stbi_load("textures/grass_tile.png", &texWidth, &texHeight, &texChannels, STBI_rgb_alpha);
 
-        texture_ = new Texture(VK_FORMAT_R8G8B8A8_UNORM, VkExtent3D{ (uint)texWidth, (uint)texHeight, 1 });
+        texture_ = new Texture(VK_FORMAT_R8G8B8A8_UNORM, VkExtent3D{ (uint)texWidth, (uint)texHeight, 1 }, Texture::Type::TEX_2D);
 
-        auto texAllocRes = texture_->Allocate(pixels, "GrassTile");
+        auto texAllocRes = texture_->Allocate((void**)&pixels, "GrassTile");
         stbi_image_free(pixels);
     
         if (FAILED(texAllocRes))
@@ -34,9 +34,9 @@ RESULT TexturedTriangleMaterial::Init()
         int texWidth, texHeight, texChannels;
         stbi_uc* pixels = stbi_load("textures/tree.png", &texWidth, &texHeight, &texChannels, STBI_rgb_alpha);
 
-        textureTree_ = new Texture(VK_FORMAT_R8G8B8A8_UNORM, VkExtent3D{ (uint)texWidth, (uint)texHeight, 1 });
+        textureTree_ = new Texture(VK_FORMAT_R8G8B8A8_UNORM, VkExtent3D{ (uint)texWidth, (uint)texHeight, 1 }, Texture::Type::TEX_2D);
 
-        auto texAllocRes = textureTree_->Allocate(pixels, "Tree");
+        auto texAllocRes = textureTree_->Allocate((void**)&pixels, "Tree");
         stbi_image_free(pixels);
     
         if (FAILED(texAllocRes))
@@ -47,9 +47,9 @@ RESULT TexturedTriangleMaterial::Init()
         int texWidth, texHeight, texChannels;
         stbi_uc* pixels = stbi_load("textures/box.png", &texWidth, &texHeight, &texChannels, STBI_rgb_alpha);
 
-        textureBox_ = new Texture(VK_FORMAT_R8G8B8A8_UNORM, VkExtent3D{ (uint)texWidth, (uint)texHeight, 1 });
+        textureBox_ = new Texture(VK_FORMAT_R8G8B8A8_UNORM, VkExtent3D{ (uint)texWidth, (uint)texHeight, 1 }, Texture::Type::TEX_2D);
 
-        auto texAllocRes = textureBox_->Allocate(pixels, "Box");
+        auto texAllocRes = textureBox_->Allocate((void**)&pixels, "Box");
         stbi_image_free(pixels);
     
         if (FAILED(texAllocRes))
@@ -140,6 +140,7 @@ RESULT PhongMaterial::Init()
 //------------------------------------------------------------------------------
 void PhongMaterial::Draw()
 {
+    // TODO move scene CB elsewhere
     struct SceneData
     {
         Mat44   Projection;
@@ -157,8 +158,82 @@ void PhongMaterial::Draw()
 
     g_Render->SetDynamicUbo(1, &constBuffer);
 
+
+    // This material setup
     g_Render->SetShader<PS_VERT>(phongVert_);
     g_Render->SetShader<PS_FRAG>(phongFrag_);
+
+    g_Render->Draw(3 * 12, 0);
+}
+
+//------------------------------------------------------------------------------
+RESULT SkyboxMaterial::Init()
+{
+    {
+        stbi_uc* pixels[6]{};
+
+        int texWidth, texHeight, texChannels;
+        pixels[0] = stbi_load("textures/skybox/right.jpg", &texWidth, &texHeight, &texChannels, STBI_rgb_alpha);
+        pixels[1] = stbi_load("textures/skybox/left.jpg", &texWidth, &texHeight, &texChannels, STBI_rgb_alpha);
+        pixels[2] = stbi_load("textures/skybox/top.jpg", &texWidth, &texHeight, &texChannels, STBI_rgb_alpha);
+        pixels[3] = stbi_load("textures/skybox/bottom.jpg", &texWidth, &texHeight, &texChannels, STBI_rgb_alpha);
+        pixels[4] = stbi_load("textures/skybox/front.jpg", &texWidth, &texHeight, &texChannels, STBI_rgb_alpha);
+        pixels[5] = stbi_load("textures/skybox/back.jpg", &texWidth, &texHeight, &texChannels, STBI_rgb_alpha);
+
+        skyboxCubemap_ = new Texture(VK_FORMAT_R8G8B8A8_UNORM, VkExtent3D{ (uint)texWidth, (uint)texHeight, 1 }, Texture::Type::TEX_CUBE);
+
+        auto texAllocRes = skyboxCubemap_->Allocate((void**)pixels, "Skybox");
+        for (uint i = 0; i < vkr_arr_len(pixels); ++i)
+            stbi_image_free(pixels[i]);
+    
+        if (FAILED(texAllocRes))
+            return R_FAIL; // TODO release resources
+    }
+
+    skyboxVert_ = g_Render->GetShaderManager()->GetOrCreateShader("Skybox_vs.hlsl");
+    if (!skyboxVert_)
+        return R_FAIL;
+
+    skyboxFrag_ = g_Render->GetShaderManager()->GetOrCreateShader("Skybox_fs.hlsl");
+    if (!skyboxFrag_)
+        return R_FAIL;
+
+    return R_OK;
+}
+
+//------------------------------------------------------------------------------
+void SkyboxMaterial::Draw()
+{
+    // TODO move scene CB elsewhere
+    struct SceneData
+    {
+        Mat44   Projection;
+        Vec4    ViewPos;
+    };
+
+    void* mapped;
+    DynamicUBOEntry constBuffer = g_Render->GetUBOCache()->BeginAlloc(sizeof(SceneData), &mapped);
+    auto ubo = (SceneData*)mapped;
+
+    Mat44 camMat = g_Render->GetCamera().ToCamera();
+    camMat.SetPosition(Vec3{});
+
+    Mat44 projMat = camMat * g_Render->GetCamera().ToProjection();
+    ubo->Projection = projMat;
+
+    g_Render->GetUBOCache()->EndAlloc();
+
+    g_Render->SetDynamicUbo(1, &constBuffer);
+
+
+    // This material setup
+    g_Render->SetShader<PS_VERT>(skyboxVert_);
+    g_Render->SetShader<PS_FRAG>(skyboxFrag_);
+
+    // Bind skybox texture
+    g_Render->SetTexture(0, skyboxCubemap_);
+
+    g_Render->SetDepthState(false);
 
     g_Render->Draw(3 * 12, 0);
 }
