@@ -126,7 +126,8 @@ public:
             items_ = newItems;
         }
 
-        items_[count_++] = item;
+        new(items_ + count_) T(item);
+        ++count_;
     }
 
     //------------------------------------------------------------------------------
@@ -152,8 +153,8 @@ public:
             memmove(&items_[index + 1], &items_[index], (count_ - index) * sizeof(T));
         }
 
+        new(items_ + index) T(item);
         ++count_;
-        items_[index] = item;
     }
 
     //------------------------------------------------------------------------------
