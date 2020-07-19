@@ -11,6 +11,8 @@
 
 #include "DrawCanvas.h"
 
+#include "Serialization.h"
+
 #include "vkr_Assert.h"
 #include "vkr_Vulkan.h"
 
@@ -875,6 +877,11 @@ RESULT Render::InitWin32(HWND hwnd, HINSTANCE hinst)
             return R_FAIL;
         }
     }
+
+    // 
+    serializationManager_ = new SerializationManager();
+    if (FAILED(serializationManager_->Init()))
+        return R_FAIL;
 
     drawCanvas_ = new DrawCanvas();
     if (FAILED(drawCanvas_->Init()))

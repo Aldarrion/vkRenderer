@@ -10,19 +10,22 @@ set(CMAKE_CXX_STANDARD 14)
 set(PROJ_NAME VkRenderer)
 project(${PROJ_NAME})
 
-file(GLOB_RECURSE VKR_HEADERS "Render/include/*.h")
-file(GLOB_RECURSE VKR_SOURCES "Render/src/*.cpp")
+file(GLOB_RECURSE VKR_HEADERS "render/include/*.h")
+file(GLOB_RECURSE VKR_SOURCES "render/src/*.cpp")
+file(GLOB_RECURSE EXTERN_CJSON_SRC "extern/cjson/src/*.c")
 
-source_group(TREE "${CMAKE_CURRENT_SOURCE_DIR}/Render/include" PREFIX "Render" FILES ${VKR_HEADERS})
-source_group(TREE "${CMAKE_CURRENT_SOURCE_DIR}/Render/src" PREFIX "Render" FILES ${VKR_SOURCES})
+source_group(TREE "${CMAKE_CURRENT_SOURCE_DIR}/render/include" PREFIX "Render" FILES ${VKR_HEADERS})
+source_group(TREE "${CMAKE_CURRENT_SOURCE_DIR}/render/src" PREFIX "Render" FILES ${VKR_SOURCES})
+source_group(TREE "${CMAKE_CURRENT_SOURCE_DIR}/extern/cjson/src" PREFIX "Extern/cJSON" FILES ${EXTERN_CJSON_SRC})
 
-add_executable(${PROJ_NAME} WIN32 ${VKR_SOURCES} ${VKR_HEADERS})
+add_executable(${PROJ_NAME} WIN32 ${VKR_SOURCES} ${VKR_HEADERS} ${EXTERN_CJSON_SRC})
 
 set(VK_SDK_DIR "" CACHE STRING "Root directory of the LunarG SDK")
 
 target_include_directories(${PROJ_NAME} PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/render/include")
 target_include_directories(${PROJ_NAME} PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/extern/VulkanMemoryAllocator/include")
 target_include_directories(${PROJ_NAME} PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/extern/stb/include")
+target_include_directories(${PROJ_NAME} PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/extern/cjson/include")
 target_include_directories(${PROJ_NAME} PRIVATE "${VK_SDK_DIR}/Include")
 
 target_link_libraries(${PROJ_NAME} "${VK_SDK_DIR}/Lib/vulkan-1.lib")

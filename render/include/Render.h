@@ -55,6 +55,8 @@ struct DynamicUBOEntry;
 
 class DrawCanvas;
 
+class SerializationManager;
+
 //------------------------------------------------------------------------------
 enum DepthState
 {
@@ -261,6 +263,10 @@ private:
     RESULT AfterDraw();
 
     RESULT WaitForFence(VkFence fence);
+
+    //----------------------
+    // Serialization
+    SerializationManager* serializationManager_;
 
     //----------------------
     // Camera

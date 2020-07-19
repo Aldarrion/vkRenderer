@@ -68,6 +68,7 @@ RESULT ShaderManager::CompileShader(const char* file, PipelineStage type, Shader
     char* buffer = (char*)malloc(size);
     if (!buffer)
     {
+        fclose(f);
         free(buffer);
         Log(LogLevel::Error, "Failed to alloc space for shader file");
         return R_FAIL;
@@ -77,9 +78,9 @@ RESULT ShaderManager::CompileShader(const char* file, PipelineStage type, Shader
     auto eof = feof(f);
     if (readRes != size && !eof)
     {
-        Log(LogLevel::Error, "Failed to read the shader file, error %d", ferror(f));
         free(buffer);
         fclose(f);
+        Log(LogLevel::Error, "Failed to read the shader file, error %d", ferror(f));
         return R_FAIL;
     }
     fclose(f);
@@ -166,7 +167,6 @@ RESULT ShaderManager::CreateShader(const char* name, Shader* shader)
     static char path[BUFF_LEN];
     snprintf(path, BUFF_LEN, PATH_PREFIX, name);
 
-    
     if (CompileShader(path, stage, *shader) != R_OK)
         return R_FAIL;
 
