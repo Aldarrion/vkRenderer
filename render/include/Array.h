@@ -90,6 +90,8 @@ public:
         other.items_ = nullptr;
         other.capacity_ = 0;
         other.count_ = 0;
+
+        return *this;
     }
 
     //------------------------------------------------------------------------------
