@@ -125,18 +125,17 @@ RESULT SerializationManager::FillObject(cJSON* json, PropertyContainer& containe
         containerDef = def->second->GetDef(version);
     }
 
+    container.Def = def->second;
+
     return R_OK;
 }
 
 //------------------------------------------------------------------------------
-RESULT SerializationManager::ReadConfig(const char* fileName, PropertyContainer& container)
+RESULT SerializationManager::LoadConfig(const char* fileName, PropertyContainer& container)
 {
     FILE* f = fopen(fileName, "r");
     if (!f)
-    {
-        Log(LogLevel::Error, "Failed to open config %s", fileName);
-        return R_FAIL;
-    }
+        LOG_AND_FAIL("Failed to open config %s", fileName);
 
     fseek(f , 0 , SEEK_END);
     auto size = ftell(f);
@@ -147,8 +146,7 @@ RESULT SerializationManager::ReadConfig(const char* fileName, PropertyContainer&
     {
         free(buffer);
         fclose(f);
-        Log(LogLevel::Error, "Failed to alloc space for config data");
-        return R_FAIL;
+        LOG_AND_FAIL("Failed to alloc space for config data");
     }
 
     auto readRes = fread(buffer, 1, size, f);
@@ -157,8 +155,7 @@ RESULT SerializationManager::ReadConfig(const char* fileName, PropertyContainer&
     {
         free(buffer);
         fclose(f);
-        Log(LogLevel::Error, "Failed to read config file %s, error %d", fileName, ferror(f));
-        return R_FAIL;
+        LOG_AND_FAIL("Failed to read config file %s, error %d", fileName, ferror(f));
     }
     fclose(f);
 
@@ -168,19 +165,98 @@ RESULT SerializationManager::ReadConfig(const char* fileName, PropertyContainer&
     if (!root)
     {
         const char* jsonError = cJSON_GetErrorPtr();
-        Log(LogLevel::Error, "Failed to parse config file %s, error %s", fileName, jsonError);
-        return R_FAIL;
+        LOG_AND_FAIL("Failed to parse config file %s, error %s", fileName, jsonError);
     }
 
     // Json parsed, fill the container
     if (FAILED(FillObject(root, container)))
     {
         cJSON_Delete(root);
-        Log(LogLevel::Error, "Failed to decode config file %s", fileName);
-        return R_FAIL;
+        LOG_AND_FAIL("Failed to decode config file %s", fileName);
     }
 
     cJSON_Delete(root);
+    return R_OK;
+}
+
+//------------------------------------------------------------------------------
+RESULT SerializationManager::SaveConfig(const char* fileName, const PropertyContainer& container)
+{
+    FILE* f = fopen(fileName, "w");
+    if (!f)
+        LOG_AND_FAIL("Failed to open config %s for writing", fileName);
+
+    cJSON* root = cJSON_CreateObject();
+
+    //-----------------------------
+    // Serialize object starts here
+    const ContainerDef& containerDef = container.Def->GetLatestDef();
+    
+    cJSON_AddStringToObject(root, "Def", containerDef.name_);
+    cJSON_AddNumberToObject(root, "Version", container.Def->GetLatestVersion());
+    
+    for (int i = 0; i < containerDef.props_.Count(); ++i)
+    {
+        PropertyValue prop = container.GetValue(i);
+        const char* name = containerDef.props_[i].name_;
+
+        switch (prop.Type)
+        {
+            case PropertyType::Int:
+            {
+                cJSON_AddNumberToObject(root, name, prop.I);
+                break;
+            }
+            case PropertyType::Float:
+            {
+                cJSON_AddNumberToObject(root, name, prop.F);
+                break;
+            }
+            case PropertyType::Vec2:
+            {
+                cJSON* arr = cJSON_AddArrayToObject(root, name);
+                
+                cJSON_AddItemToArray(arr, cJSON_CreateNumber(prop.V2.x));
+                cJSON_AddItemToArray(arr, cJSON_CreateNumber(prop.V2.y));
+                break;
+            }
+            case PropertyType::Vec3:
+            {
+                cJSON* arr = cJSON_AddArrayToObject(root, name);
+                
+                cJSON_AddItemToArray(arr, cJSON_CreateNumber(prop.V3.x));
+                cJSON_AddItemToArray(arr, cJSON_CreateNumber(prop.V3.y));
+                cJSON_AddItemToArray(arr, cJSON_CreateNumber(prop.V3.z));
+                break;
+            }
+            case PropertyType::String:
+            {
+                cJSON_AddStringToObject(root, name, prop.Str);
+                break;
+            }
+        }
+    }
+
+    const char* serialized = cJSON_Print(root);
+    if (!serialized)
+    {
+        fclose(f);
+        cJSON_Delete(root);
+        LOG_AND_FAIL("Failed to print JSON, error: %s", cJSON_GetErrorPtr());
+    }
+
+    cJSON_Delete(root);
+
+    int writeResult = fputs(serialized, f);
+    if (writeResult == EOF)
+    {
+        fclose(f);
+        delete serialized;
+        LOG_AND_FAIL("Failed to write config to file, error: %d", ferror(f));
+    }
+
+    fclose(f);
+    delete serialized;
     return R_OK;
 }
 
@@ -189,32 +265,18 @@ RESULT SerializationManager::Init()
 {
     defs_.emplace("CameraDef", new CameraDef());
 
-    char cwd[512];
-    GetCurrentDirectory(512, cwd);
-
-    PropertyContainer container;
-    RESULT r = ReadConfig("configs/Camera.json", container);
+    for (const auto def : defs_)
+        def.second->Init();
 
     return R_OK;
 }
 
 //------------------------------------------------------------------------------
-PropertyContainer Deserialize(/*data*/)
+const DefBase* SerializationManager::GetDef(const char* name) const
 {
-    /*
-    const char* name = data.GetName();
-    DataDef def = GetDef(name);
-
-    PropertyContainer container;
-    for (auto field : data)
-    {
-        findField in def
-        container.Properties.Add({ propIdx, field.Value });
-    }
-
-    */
-
-    return {};
+    auto def = defs_.find(name);
+    vkr_assert(def != defs_.end());
+    return def->second;
 }
 
 #undef LOG_AND_FAIL

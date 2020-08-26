@@ -38,6 +38,33 @@ struct PropertyValue
         Vec3 V3;
         char* Str;
     };
+
+    PropertyValue() = default;
+
+    PropertyValue(PropertyType type, int i)
+        : Type(type), I(i)
+    {
+    }
+
+    PropertyValue(PropertyType type, float f)
+        : Type(type), F(f)
+    {
+    }
+
+    PropertyValue(PropertyType type, Vec2 v2)
+        : Type(type), V2(v2)
+    {
+    }
+
+    PropertyValue(PropertyType type, const Vec3& v3)
+        : Type(type), V3(v3)
+    {
+    }
+
+    PropertyValue(PropertyType type, char* s)
+        : Type(type), Str(s)
+    {
+    }
 };
 
 //------------------------------------------------------------------------------
@@ -73,6 +100,7 @@ struct ContainerDef
     }
 };
 
+struct DefBase;
 //------------------------------------------------------------------------------
 struct PropertyContainer
 {
@@ -80,6 +108,8 @@ struct PropertyContainer
     {
         uint Idx;
         PropertyValue Value;
+
+        PropertyPair() = default;
 
         ~PropertyPair()
         {
@@ -89,6 +119,7 @@ struct PropertyContainer
     };
 
     Array<PropertyPair> Properties;
+    const DefBase* Def;
 
     //------------------------------------------------------------------------------
     const PropertyValue& GetValue(uint idx) const
@@ -138,6 +169,18 @@ struct PropertyContainer
 //------------------------------------------------------------------------------
 struct DefBase
 {
+    ContainerDef LatestDef;
+
+    void Init()
+    {
+        LatestDef = GetDef(GetLatestVersion());
+    }
+
+    const ContainerDef& GetLatestDef() const
+    {
+        return LatestDef;
+    }
+
     virtual ContainerDef GetDef(uint version) const = 0;
     virtual void Upgrade(const ContainerDef& def, PropertyContainer& container, uint& version) const = 0;
     virtual uint GetLatestVersion() const = 0;
@@ -146,6 +189,9 @@ struct DefBase
 //------------------------------------------------------------------------------
 struct CameraDef : DefBase
 {
+    //------------------------------------------------------------------------------
+    static constexpr const char* NAME = "CameraDef";
+
     //------------------------------------------------------------------------------
     uint GetLatestVersion() const
     {
@@ -160,7 +206,7 @@ struct CameraDef : DefBase
         {
             case 0:
             {
-                def.name_ = "CameraDef";
+                def.name_ = NAME;
                 def.props_.Add(PropertyDefinition{ PropertyType::Vec3, "Position" });
                 def.props_.Add(PropertyDefinition{ PropertyType::Float, "Pitch" });
                 def.props_.Add(PropertyDefinition{ PropertyType::Float, "Yaw" });
@@ -168,7 +214,7 @@ struct CameraDef : DefBase
             }
             case 1:
             {
-                def.name_ = "CameraDef";
+                def.name_ = NAME;
                 def.props_.Add(PropertyDefinition{ PropertyType::Vec3, "Position" });
                 def.props_.Add(PropertyDefinition{ PropertyType::Vec2, "Angles" });
                 break;
@@ -229,7 +275,9 @@ class SerializationManager
 {
 public:
     RESULT Init();
-    RESULT ReadConfig(const char* fileName, PropertyContainer& container);
+    RESULT LoadConfig(const char* fileName, PropertyContainer& container);
+    RESULT SaveConfig(const char* fileName, const PropertyContainer& container);
+    const DefBase* GetDef(const char* name) const;
 
 private:
     std::unordered_map<const char*, DefBase*, StrHash<const char*>, StrCmpEq<const char*>> defs_;

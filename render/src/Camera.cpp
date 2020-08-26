@@ -2,9 +2,25 @@
 
 #include "Input.h"
 #include "Render.h"
+#include "Serialization.h"
 
 namespace vkr
 {
+
+//------------------------------------------------------------------------------
+void Camera::Init(const PropertyContainer& data)
+{
+    pos_ = data.GetValue(CameraDef::POSITION).V3;
+    angles_ = data.GetValue(CameraDef::ANGLES).V2;
+    UpdateCameraVectors();
+}
+
+//------------------------------------------------------------------------------
+void Camera::FillData(PropertyContainer& data)
+{
+    data.Insert({ CameraDef::POSITION, PropertyValue(PropertyType::Vec3, pos_) });
+    data.Insert({ CameraDef::ANGLES, PropertyValue(PropertyType::Vec2, angles_) });
+}
 
 //------------------------------------------------------------------------------
 void Camera::UpdateCameraVectors()

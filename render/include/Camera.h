@@ -6,12 +6,18 @@ namespace vkr
 {
 
 //------------------------------------------------------------------------------
+struct PropertyContainer;
+
+//------------------------------------------------------------------------------
 class Camera
 {
 public:
     const Mat44& ToCamera() const;
     const Mat44& ToProjection() const;
     const Vec3& Position() const;
+
+    void Init(const PropertyContainer& data);
+    void FillData(PropertyContainer& data);
 
     void Update();
 

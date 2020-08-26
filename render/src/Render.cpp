@@ -12,6 +12,7 @@
 #include "DrawCanvas.h"
 
 #include "Serialization.h"
+#include "Input.h"
 
 #include "vkr_Assert.h"
 #include "vkr_Vulkan.h"
@@ -21,6 +22,10 @@
 #include <malloc.h>
 #include <cstdio>
 #include <cfloat>
+
+
+//------------------------------------------------------------------------------
+static constexpr const char* CAMERA_CFG = "configs/Camera.json";
 
 //------------------------------------------------------------------------------
 const char* ResultToString(VkResult result)
@@ -274,6 +279,22 @@ void Render::TransitionBarrier(
         0, nullptr,
         1, &barrier
     );
+}
+
+//------------------------------------------------------------------------------
+void Render::LoadCamera()
+{
+    PropertyContainer cameraData;
+    RESULT r = serializationManager_->LoadConfig(CAMERA_CFG, cameraData);
+    if (r == R_OK)
+    {
+        camera_.Init(cameraData);
+        Log(LogLevel::Info, "Camera transform loaded");
+    }
+    else
+    {
+        Log(LogLevel::Error, "Failed to load camera transform");
+    }
 }
 
 //------------------------------------------------------------------------------
@@ -883,6 +904,8 @@ RESULT Render::InitWin32(HWND hwnd, HINSTANCE hinst)
     if (FAILED(serializationManager_->Init()))
         return R_FAIL;
 
+    LoadCamera();
+
     drawCanvas_ = new DrawCanvas();
     if (FAILED(drawCanvas_->Init()))
         return R_FAIL;
@@ -1149,6 +1172,25 @@ void Render::Update(float dTime)
     dTime_ = dTime;
 
     camera_.Update();
+
+    {
+        if (g_Input->IsKeyUp(VK_F6))
+        {
+            PropertyContainer cameraData;
+            cameraData.Def = serializationManager_->GetDef(CameraDef::NAME);
+            camera_.FillData(cameraData);
+            RESULT res = serializationManager_->SaveConfig(CAMERA_CFG, cameraData);
+            if (res == R_OK)
+                Log(LogLevel::Info, "Camera transform saved");
+            else
+                Log(LogLevel::Error, "Failed to save camera transform");
+        }
+
+        if (g_Input->IsKeyUp(VK_F9))
+        {
+            LoadCamera();
+        }
+    }
 
     //-------------------
     // Create render pass

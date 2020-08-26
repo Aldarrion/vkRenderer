@@ -275,6 +275,8 @@ private:
     //----------------------
     // Time
     float dTime_{};
+
+    void LoadCamera();
 };
 
 
