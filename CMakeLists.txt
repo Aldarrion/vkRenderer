@@ -1,52 +1,31 @@
 cmake_minimum_required(VERSION 3.14)
 
-# To enable MSVC_RUNTIME_LIBRARY
-cmake_policy(SET CMP0091 NEW)
-
-set(CMAKE_CONFIGURATION_TYPES "Release;Debug;RelWithDebInfo")
-
-set(CMAKE_CXX_STANDARD 14)
-
 set(PROJ_NAME VkRenderer)
 project(${PROJ_NAME})
 
-file(GLOB_RECURSE VKR_HEADERS "render/include/*.h")
-file(GLOB_RECURSE VKR_SOURCES "render/src/*.cpp")
-file(GLOB_RECURSE EXTERN_CJSON_SRC "extern/cjson/src/*.c")
+add_subdirectory(Engine)
 
-source_group(TREE "${CMAKE_CURRENT_SOURCE_DIR}/render/include" PREFIX "Render" FILES ${VKR_HEADERS})
-source_group(TREE "${CMAKE_CURRENT_SOURCE_DIR}/render/src" PREFIX "Render" FILES ${VKR_SOURCES})
-source_group(TREE "${CMAKE_CURRENT_SOURCE_DIR}/extern/cjson/src" PREFIX "Extern/cJSON" FILES ${EXTERN_CJSON_SRC})
+set(CMAKE_CXX_STANDARD 17)
 
-add_executable(${PROJ_NAME} WIN32 ${VKR_SOURCES} ${VKR_HEADERS} ${EXTERN_CJSON_SRC})
+# Vkr setup
+file(GLOB_RECURSE VKR_HEADERS "Vkr/include/*.h")
+file(GLOB_RECURSE VKR_SOURCES "Vkr/src/*.cpp")
+file(GLOB_RECURSE EDITORCONFIG "Engine/.editorconfig")
 
-set(VK_SDK_DIR "" CACHE STRING "Root directory of the LunarG SDK")
+source_group(TREE "${CMAKE_CURRENT_SOURCE_DIR}/Vkr/include" PREFIX "Vkr" FILES ${VKR_HEADERS})
+source_group(TREE "${CMAKE_CURRENT_SOURCE_DIR}/Vkr/src" PREFIX "Vkr" FILES ${VKR_SOURCES})
 
-target_include_directories(${PROJ_NAME} PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/render/include")
-target_include_directories(${PROJ_NAME} PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/extern/VulkanMemoryAllocator/include")
-target_include_directories(${PROJ_NAME} PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/extern/stb/include")
-target_include_directories(${PROJ_NAME} PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/extern/cjson/include")
-target_include_directories(${PROJ_NAME} PRIVATE "${VK_SDK_DIR}/Include")
+add_executable(${PROJ_NAME} WIN32 ${VKR_SOURCES} ${VKR_HEADERS} ${EDITORCONFIG})
 
-target_link_libraries(${PROJ_NAME} "${VK_SDK_DIR}/Lib/vulkan-1.lib")
-target_link_libraries(${PROJ_NAME} "${VK_SDK_DIR}/Lib/shaderc_combined.lib")
+target_include_directories(${PROJ_NAME} PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/Vkr/include")
 
-set_property(TARGET ${PROJ_NAME} PROPERTY VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}/data")
+target_link_libraries(${PROJ_NAME} HiddenEngine)
 
-if(MSVC)
-    # shaderc is compiled with /MD so we cannot compile with /MDd even on debug or we would need to rebuild the shaderc_combined.lib
-    set_property(TARGET ${PROJ_NAME} PROPERTY MSVC_RUNTIME_LIBRARY "MultiThreadedDLL")
-    # Also for shaderc
-    add_definitions(-D_HAS_ITERATOR_DEBUGGING=0)
-    add_definitions(-D_ITERATOR_DEBUG_LEVEL=0)
+set_property(TARGET ${PROJ_NAME} PROPERTY VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}/Data")
 
-    add_definitions(/MP)
-    add_definitions(/D _CRT_SECURE_NO_WARNINGS)
-    target_compile_options(${PROJ_NAME} PRIVATE /WX)
-
-    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /wd4267") # conversion from 'size_t' to 'uint', possible loss of data
-    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /wd4244") # conversion from 'LONG' to 'float', possible loss of data
-endif()
+#
+include(Engine/CMakeCommon.cmake)
+SetupCompiler(${PROJ_NAME})
 
 # Solution name
 project (VkRenderer)
