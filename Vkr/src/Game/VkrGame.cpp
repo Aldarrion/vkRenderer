@@ -1,5 +1,9 @@
 #include "Game/VkrGame.h"
 
+#include "Render/Material.h"
+
+#include "Render/Render.h"
+
 namespace hs
 {
 
@@ -26,6 +30,11 @@ void DestroyGame()
 //------------------------------------------------------------------------------
 RESULT VkrGame::InitWin32()
 {
+    if (HS_FAILED(g_Render->AddMaterial(MakeUnique<SkyboxMaterial>())))
+        return R_FAIL;
+
+    g_Render->GetCamera().InitAsPerspective(Vec3(-8, -7, 15), Vec3(0, 0, 0));
+
     return R_OK;
 }
 
