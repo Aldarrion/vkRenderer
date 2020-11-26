@@ -4,6 +4,8 @@
 
 #include "Render/Render.h"
 
+#include "Input/Input.h"
+
 namespace hs
 {
 
@@ -33,6 +35,9 @@ RESULT VkrGame::InitWin32()
     if (HS_FAILED(g_Render->AddMaterial(MakeUnique<SkyboxMaterial>())))
         return R_FAIL;
 
+    if (HS_FAILED(g_Render->AddMaterial(MakeUnique<PhongMaterial>())))
+        return R_FAIL;
+
     g_Render->GetCamera().InitAsPerspective(Vec3(-8, -7, 15), Vec3(0, 0, 0));
 
     return R_OK;
@@ -47,6 +52,7 @@ RESULT VkrGame::OnWindowResized()
 //------------------------------------------------------------------------------
 void VkrGame::Update()
 {
+    g_Render->GetCamera().UpdateFreeFly();
 }
 
 }
