@@ -6,6 +6,8 @@
 
 #include "Input/Input.h"
 
+#include "imgui/imgui.h"
+
 namespace hs
 {
 
@@ -30,15 +32,39 @@ void DestroyGame()
 }
 
 //------------------------------------------------------------------------------
+// TODO better obviously
+static VisualObject skybox;
+static VisualObject pbrBox[4];
+
+static UniquePtr<Material> skyboxMaterial;
+static UniquePtr<PBRMaterial> pbrMaterial[HS_ARR_LEN(pbrBox)];
+
+//------------------------------------------------------------------------------
 RESULT VkrGame::InitWin32()
 {
-    if (HS_FAILED(g_Render->AddMaterial(MakeUnique<SkyboxMaterial>())))
+    g_Render->GetCamera().InitAsPerspective(Vec3(0, 0, 0), Vec3(0, 0, 1));
+
+    // Skybox
+    skyboxMaterial = MakeUnique<SkyboxMaterial>();
+    if (HS_FAILED(skyboxMaterial->Init()))
         return R_FAIL;
 
-    if (HS_FAILED(g_Render->AddMaterial(MakeUnique<PBRMaterial>())))
-        return R_FAIL;
+    skybox.material_ = skyboxMaterial.Get();
 
-    g_Render->GetCamera().InitAsPerspective(Vec3(-8, -7, 15), Vec3(0, 0, 0));
+    // Pbr boxes
+    for (uint i = 0; i < HS_ARR_LEN(pbrBox); ++i)
+    {
+        pbrMaterial[i] = MakeUnique<PBRMaterial>();
+        if (HS_FAILED(pbrMaterial[i]->Init()))
+            return R_FAIL;
+
+        pbrBox[i].material_ = pbrMaterial[i].Get();
+        pbrBox[i].transform_ = Mat44::Scale(3);
+    }
+    pbrBox[0].transform_.SetPosition(Vec3(5, -5, 20));
+    pbrBox[1].transform_.SetPosition(Vec3(-5, -5, 20));
+    pbrBox[2].transform_.SetPosition(Vec3(5, 5, 20));
+    pbrBox[3].transform_.SetPosition(Vec3(-5, 5, 20));
 
     return R_OK;
 }
@@ -49,10 +75,35 @@ RESULT VkrGame::OnWindowResized()
     return R_OK;
 }
 
+int boxIdx = 0;
 //------------------------------------------------------------------------------
 void VkrGame::Update()
 {
     g_Render->GetCamera().UpdateFreeFly();
+
+    g_Render->RenderObject(&skybox);
+
+    ImGui::Begin("PBR settings");
+        ImGui::SliderInt("Box idx", &boxIdx, 0, HS_ARR_LEN(pbrBox) - 1);
+
+        auto mat = ((PBRMaterial*)pbrBox[boxIdx].material_);
+        Vec3 albedo = mat->GetAlbedo();
+        float roughness = mat->GetRoughness();
+        float metallic = mat->GetMetallic();
+        float ao = mat->GetAo();
+
+        ImGui::ColorPicker3("Albedo", albedo.v);
+        ImGui::SliderFloat("Roughness", &roughness, 0, 1);
+        ImGui::SliderFloat("Metellic", &metallic, 0, 1);
+        ImGui::SliderFloat("Ambient", &ao, 0, 1);
+
+        mat->SetAlbedo(albedo);
+        mat->SetRoughness(roughness);
+        mat->SetMetallic(metallic);
+        mat->SetAo(ao);
+    ImGui::End();
+
+    g_Render->RenderObjects(MakeSpan(pbrBox));
 }
 
 }
