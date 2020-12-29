@@ -15,7 +15,9 @@ void DestroyGame();
 class VkrGame : public GameBase
 {
 public:
-    RESULT InitWin32() override;
+    #if HS_WINDOWS
+        RESULT InitWin32() override;
+    #endif
     RESULT OnWindowResized() override;
     void Update() override;
 };

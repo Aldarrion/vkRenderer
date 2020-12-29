@@ -15,7 +15,11 @@ file(GLOB_RECURSE EDITORCONFIG "Engine/.editorconfig")
 source_group(TREE "${CMAKE_CURRENT_SOURCE_DIR}/Vkr/include" PREFIX "Vkr" FILES ${VKR_HEADERS})
 source_group(TREE "${CMAKE_CURRENT_SOURCE_DIR}/Vkr/src" PREFIX "Vkr" FILES ${VKR_SOURCES})
 
-add_executable(${PROJ_NAME} WIN32 ${VKR_SOURCES} ${VKR_HEADERS} ${EDITORCONFIG})
+if(WIN32)
+    add_executable(${PROJ_NAME} WIN32 ${VKR_SOURCES} ${VKR_HEADERS} ${EDITORCONFIG})
+else()
+    add_executable(${PROJ_NAME} ${VKR_SOURCES} ${VKR_HEADERS} ${EDITORCONFIG})
+endif()
 
 target_include_directories(${PROJ_NAME} PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/Vkr/include")
 
