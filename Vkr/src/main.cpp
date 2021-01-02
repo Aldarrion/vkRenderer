@@ -9,9 +9,9 @@
     }
 #elif HS_LINUX
     //------------------------------------------------------------------------------
-    int main()
+    int main(int argc, char** argv)
     {
-        int result = hs::EngineMainLinux();
+        int result = hs::EngineMainLinux(argc, argv);
         return result;
     }
 #endif

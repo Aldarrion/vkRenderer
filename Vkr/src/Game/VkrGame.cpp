@@ -39,37 +39,35 @@ static VisualObject pbrBox[4];
 static UniquePtr<Material> skyboxMaterial;
 static UniquePtr<PBRMaterial> pbrMaterial[HS_ARR_LEN(pbrBox)];
 
-#if HS_WINDOWS
-    //------------------------------------------------------------------------------
-    RESULT VkrGame::InitWin32()
-    {
-        g_Render->GetCamera().InitAsPerspective(Vec3(0, 0, 0), Vec3(0, 0, 1));
+//------------------------------------------------------------------------------
+RESULT VkrGame::Init()
+{
+    g_Render->GetCamera().InitAsPerspective(Vec3(0, 0, 0), Vec3(0, 0, 1));
 
-        // Skybox
-        skyboxMaterial = MakeUnique<SkyboxMaterial>();
-        if (HS_FAILED(skyboxMaterial->Init()))
+    // Skybox
+    skyboxMaterial = MakeUnique<SkyboxMaterial>();
+    if (HS_FAILED(skyboxMaterial->Init()))
+        return R_FAIL;
+
+    skybox.material_ = skyboxMaterial.Get();
+
+    // Pbr boxes
+    for (uint i = 0; i < HS_ARR_LEN(pbrBox); ++i)
+    {
+        pbrMaterial[i] = MakeUnique<PBRMaterial>();
+        if (HS_FAILED(pbrMaterial[i]->Init()))
             return R_FAIL;
 
-        skybox.material_ = skyboxMaterial.Get();
-
-        // Pbr boxes
-        for (uint i = 0; i < HS_ARR_LEN(pbrBox); ++i)
-        {
-            pbrMaterial[i] = MakeUnique<PBRMaterial>();
-            if (HS_FAILED(pbrMaterial[i]->Init()))
-                return R_FAIL;
-
-            pbrBox[i].material_ = pbrMaterial[i].Get();
-            pbrBox[i].transform_ = Mat44::Scale(3);
-        }
-        pbrBox[0].transform_.SetPosition(Vec3(5, -5, 20));
-        pbrBox[1].transform_.SetPosition(Vec3(-5, -5, 20));
-        pbrBox[2].transform_.SetPosition(Vec3(5, 5, 20));
-        pbrBox[3].transform_.SetPosition(Vec3(-5, 5, 20));
-
-        return R_OK;
+        pbrBox[i].material_ = pbrMaterial[i].Get();
+        pbrBox[i].transform_ = Mat44::Scale(3);
     }
-#endif
+    pbrBox[0].transform_.SetPosition(Vec3(5, -5, 20));
+    pbrBox[1].transform_.SetPosition(Vec3(-5, -5, 20));
+    pbrBox[2].transform_.SetPosition(Vec3(5, 5, 20));
+    pbrBox[3].transform_.SetPosition(Vec3(-5, 5, 20));
+
+    return R_OK;
+}
 
 //------------------------------------------------------------------------------
 RESULT VkrGame::OnWindowResized()
