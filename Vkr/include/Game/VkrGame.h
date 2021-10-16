@@ -17,6 +17,7 @@ class VkrGame : public GameBase
 public:
     RESULT Init() override;
     RESULT OnWindowResized() override;
+    void Free() override;
     void Update() override;
 };
 

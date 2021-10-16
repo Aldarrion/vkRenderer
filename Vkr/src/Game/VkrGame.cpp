@@ -106,4 +106,9 @@ void VkrGame::Update()
     g_Render->RenderObjects(MakeSpan(pbrBox));
 }
 
+//------------------------------------------------------------------------------
+void VkrGame::Free()
+{
+}
+
 }

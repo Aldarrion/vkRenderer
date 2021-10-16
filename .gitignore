@@ -1,7 +1,7 @@
 /.vscode/
 /build/
 
-Data/imgui.ini
-Data/vk_apidump.txt
-Data/gfxrecon_capture.gfxr
-
+/Data/imgui.ini
+/Data/vk_apidump.txt
+/Data/gfxrecon_capture.gfxr
+/Data/Shaders/**
