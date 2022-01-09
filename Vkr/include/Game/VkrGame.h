@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Game/GameBase.h"
+#include "World/Camera.h"
 
 namespace hs
 {
@@ -19,6 +20,9 @@ public:
     RESULT OnWindowResized() override;
     void Free() override;
     void Update() override;
+
+private:
+    CameraFreelyController freeflyCamera_;
 };
 
 }

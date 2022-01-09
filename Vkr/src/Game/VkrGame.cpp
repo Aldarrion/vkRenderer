@@ -42,7 +42,8 @@ static UniquePtr<PBRMaterial> pbrMaterial[HS_ARR_LEN(pbrBox)];
 //------------------------------------------------------------------------------
 RESULT VkrGame::Init()
 {
-    g_Render->GetCamera().InitAsPerspective(Vec3(0, 0, 0), Vec3(0, 0, 1));
+    CameraInitAsPerspective(g_Render->GetCamera(), Vec3(0, 0, 0), Vec3(0, 0, 1));
+    freeflyCamera_.camera_ = g_Render->GetCamera();
 
     // Skybox
     skyboxMaterial = MakeUnique<SkyboxMaterial>();
@@ -79,7 +80,7 @@ int boxIdx = 0;
 //------------------------------------------------------------------------------
 void VkrGame::Update()
 {
-    g_Render->GetCamera().UpdateFreeFly();
+    CameraUpdateFreeFly(&freeflyCamera_);
 
     g_Render->RenderObject(&skybox);
 
