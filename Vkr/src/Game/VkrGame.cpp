@@ -1,10 +1,13 @@
 #include "Game/VkrGame.h"
 
 #include "Render/Material.h"
-
 #include "Render/Render.h"
+#include "Render/RenderBufferCache.h"
+#include "Render/Buffer.h"
 
 #include "Input/Input.h"
+
+#include "Math/Math.h"
 
 #include "imgui/imgui.h"
 
@@ -35,9 +38,84 @@ void DestroyGame()
 // TODO better obviously
 static VisualObject skybox;
 static VisualObject pbrBox[4];
+RenderBuffer g_BoxVertexBuffer;
+RenderBuffer g_BoxIndexBuffer;
 
 static UniquePtr<Material> skyboxMaterial;
 static UniquePtr<PBRMaterial> pbrMaterial[HS_ARR_LEN(pbrBox)];
+
+void CreatePbrBoxBuffers()
+{
+    // Vertex buffer
+    int boxBufferSize = 3 * 8 * sizeof(ObjectVertex);
+    HS_CHECK(g_BoxVertexBuffer.Init(RenderBufferType::Vertex, RenderBufferMemory::DeviceLocal, boxBufferSize));
+
+    ObjectVertex* verts;
+    RenderBufferEntry stagingVerts = g_Render->GetVertexCache()->BeginAlloc(boxBufferSize, sizeof(ObjectVertex), (void**)&verts);
+
+    verts[0] = ObjectVertex{ Vec4(-1.0, 1.0, -1.0, 1), Vec4(0.0, 1.0, 0.0, 1) };
+    verts[1] = ObjectVertex{ Vec4(1.0, 1.0, -1.0, 1), Vec4(0.0, 1.0, 0.0, 1) };
+    verts[2] = ObjectVertex{ Vec4(1.0, 1.0, 1.0, 1), Vec4(0.0, 1.0, 0.0, 1) };
+    verts[3] = ObjectVertex{ Vec4(-1.0, 1.0, 1.0, 1), Vec4(0.0, 1.0, 0.0, 1) };
+    verts[4] = ObjectVertex{ Vec4(-1.0, -1.0, -1.0, 1), Vec4(0.0, -1.0, 0.0, 1) };
+    verts[5] = ObjectVertex{ Vec4(1.0, -1.0, -1.0, 1), Vec4(0.0, -1.0, 0.0, 1) };
+    verts[6] = ObjectVertex{ Vec4(1.0, -1.0, 1.0, 1), Vec4(0.0, -1.0, 0.0, 1) };
+    verts[7] = ObjectVertex{ Vec4(-1.0, -1.0, 1.0, 1), Vec4(0.0, -1.0, 0.0, 1) };
+    verts[8] = ObjectVertex{ Vec4(-1.0, -1.0, 1.0, 1), Vec4(-1.0, 0.0, 0.0, 1) };
+    verts[9] = ObjectVertex{ Vec4(-1.0, -1.0, -1.0, 1), Vec4(-1.0, 0.0, 0.0, 1) };
+    verts[10] = ObjectVertex{ Vec4(-1.0, 1.0, -1.0, 1), Vec4(-1.0, 0.0, 0.0, 1) };
+    verts[11] = ObjectVertex{ Vec4(-1.0, 1.0, 1.0, 1), Vec4(-1.0, 0.0, 0.0, 1) };
+    verts[12] = ObjectVertex{ Vec4(1.0, -1.0, 1.0, 1), Vec4(1.0, 0.0, 0.0, 1) };
+    verts[13] = ObjectVertex{ Vec4(1.0, -1.0, -1.0, 1), Vec4(1.0, 0.0, 0.0, 1) };
+    verts[14] = ObjectVertex{ Vec4(1.0, 1.0, -1.0, 1), Vec4(1.0, 0.0, 0.0, 1) };
+    verts[15] = ObjectVertex{ Vec4(1.0, 1.0, 1.0, 1), Vec4(1.0, 0.0, 0.0, 1) };
+    verts[16] = ObjectVertex{ Vec4(-1.0, -1.0, -1.0, 1), Vec4(0.0, 0.0, -1.0, 1) };
+    verts[17] = ObjectVertex{ Vec4(1.0, -1.0, -1.0, 1), Vec4(0.0, 0.0, -1.0, 1) };
+    verts[18] = ObjectVertex{ Vec4(1.0, 1.0, -1.0, 1), Vec4(0.0, 0.0, -1.0, 1) };
+    verts[19] = ObjectVertex{ Vec4(-1.0, 1.0, -1.0, 1), Vec4(0.0, 0.0, -1.0, 1) };
+    verts[20] = ObjectVertex{ Vec4(-1.0, -1.0, 1.0, 1), Vec4(0.0, 0.0, 1.0, 1) };
+    verts[21] = ObjectVertex{ Vec4(1.0, -1.0, 1.0, 1), Vec4(0.0, 0.0, 1.0, 1) };
+    verts[22] = ObjectVertex{ Vec4(1.0, 1.0, 1.0, 1), Vec4(0.0, 0.0, 1.0, 1) };
+    verts[23] = ObjectVertex{ Vec4(-1.0, 1.0, 1.0, 1), Vec4(0.0, 0.0, 1.0, 1) };
+
+    g_Render->GetVertexCache()->EndAlloc();
+
+    RenderBufferEntry vertexBuffer{ g_BoxVertexBuffer.GetBuffer(), 0, g_BoxVertexBuffer.GetSize() };
+    RenderCopyBuffer(g_Render->CmdBuff(), vertexBuffer, stagingVerts);
+
+    // Index buffer
+    constexpr uint cubeIndices[] =
+    {
+        3, 1, 0,
+        2, 1, 3,
+
+        6, 4, 5,
+        7, 4, 6,
+
+        11, 9, 8,
+        10, 9, 11,
+
+        14, 12, 13,
+        15, 12, 14,
+
+        19, 17, 16,
+        18, 17, 19,
+
+        22, 20, 21,
+        23, 20, 22
+    };
+
+    HS_CHECK(g_BoxIndexBuffer.Init(RenderBufferType::Index, RenderBufferMemory::DeviceLocal, sizeof(cubeIndices)));
+
+    uint* indices;
+    RenderBufferEntry stagingIndices = g_Render->GetIndexCache()->BeginAlloc<uint>(HS_ARR_LEN(cubeIndices), &indices);
+
+    memcpy(indices, cubeIndices, sizeof(cubeIndices));
+    g_Render->GetIndexCache()->EndAlloc();
+
+    RenderBufferEntry indexBuffer{ g_BoxIndexBuffer.GetBuffer(), 0, g_BoxIndexBuffer.GetSize() };
+    RenderCopyBuffer(g_Render->CmdBuff(), indexBuffer, stagingIndices);
+}
 
 //------------------------------------------------------------------------------
 RESULT VkrGame::Init()
@@ -53,6 +131,8 @@ RESULT VkrGame::Init()
     skybox.material_ = skyboxMaterial.Get();
 
     // Pbr boxes
+    CreatePbrBoxBuffers();
+
     for (uint i = 0; i < HS_ARR_LEN(pbrBox); ++i)
     {
         pbrMaterial[i] = MakeUnique<PBRMaterial>();
@@ -61,6 +141,21 @@ RESULT VkrGame::Init()
 
         pbrBox[i].material_ = pbrMaterial[i].Get();
         pbrBox[i].transform_ = Mat44::Scale(3);
+
+        VertexBuffer vb;
+        vb.buffer_.buffer_ = g_BoxVertexBuffer.GetBuffer();
+        vb.buffer_.offset_ = 0;
+        vb.buffer_.size_ = g_BoxVertexBuffer.GetSize();
+        vb.vertexSize_ = sizeof(ObjectVertex);
+
+        pbrBox[i].vertexBuffer_ = vb;
+
+        IndexBuffer ib;
+        ib.buffer_.buffer_ = g_BoxIndexBuffer.GetBuffer();
+        ib.buffer_.offset_ = 0;
+        ib.buffer_.size_ = g_BoxIndexBuffer.GetSize();
+
+        pbrBox[i].indexBuffer_ = ib;
     }
     pbrBox[0].transform_.SetPosition(Vec3(5, -5, 20));
     pbrBox[1].transform_.SetPosition(Vec3(-5, -5, 20));
@@ -110,6 +205,7 @@ void VkrGame::Update()
 //------------------------------------------------------------------------------
 void VkrGame::Free()
 {
+    g_BoxVertexBuffer.Free();
 }
 
 }
