@@ -115,6 +115,26 @@ void CreatePbrBoxBuffers()
 
     RenderBufferEntry indexBuffer{ g_BoxIndexBuffer.GetBuffer(), 0, g_BoxIndexBuffer.GetSize() };
     RenderCopyBuffer(g_Render->CmdBuff(), indexBuffer, stagingIndices);
+
+    VkBufferMemoryBarrier barriers[2]{};
+    barriers[0].sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER;
+    barriers[0].srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+    barriers[0].dstAccessMask = VK_ACCESS_VERTEX_ATTRIBUTE_READ_BIT;
+    barriers[0].buffer = g_BoxVertexBuffer.GetBuffer();
+    barriers[0].size = g_BoxVertexBuffer.GetSize();
+
+    barriers[1].sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER;
+    barriers[1].srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+    barriers[1].dstAccessMask = VK_ACCESS_INDEX_READ_BIT;
+    barriers[1].buffer = g_BoxIndexBuffer.GetBuffer();
+    barriers[1].size = g_BoxIndexBuffer.GetSize();
+
+    vkCmdPipelineBarrier(g_Render->CmdBuff(),
+        VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_VERTEX_INPUT_BIT, 0,
+        0, nullptr,
+        HS_ARR_LEN(barriers), barriers,
+        0, nullptr
+    );
 }
 
 //------------------------------------------------------------------------------
