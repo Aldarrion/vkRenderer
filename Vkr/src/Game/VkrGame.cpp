@@ -163,7 +163,7 @@ static RESULT LoadBoxModel()
     std::string err;
     std::string warn;
 
-    bool ret = loader.LoadBinaryFromFile(&model, &err, &warn, "models/Box/Box.glb");
+    bool ret = loader.LoadBinaryFromFile(&model, &err, &warn, "models/Box/BoxInterleaved.glb");
     if (!warn.empty())
         LOG_WARN(err.c_str());
 
@@ -180,32 +180,43 @@ static RESULT LoadBoxModel()
     {
         const float* positionBuffer{};
         const float* normalBuffer{};
+        int positionStride{};
+        int normalStride{};
         int vertexCount{};
 
         if (primitive.attributes.find("POSITION") != primitive.attributes.end())
         {
-            const tinygltf::Accessor&  accessor  = model.accessors[primitive.attributes.find("POSITION")->second];
-            const tinygltf::BufferView& view     = model.bufferViews[accessor.bufferView];
-            positionBuffer                       = reinterpret_cast<const float*>(&(model.buffers[view.buffer].data[accessor.byteOffset + view.byteOffset]));
-            vertexCount                          = (int)accessor.count;
+            const tinygltf::Accessor&  accessor = model.accessors[primitive.attributes.find("POSITION")->second];
+            const tinygltf::BufferView& view    = model.bufferViews[accessor.bufferView];
+            positionBuffer                      = reinterpret_cast<const float*>(&(model.buffers[view.buffer].data[accessor.byteOffset + view.byteOffset]));
+            vertexCount                         = (int)accessor.count;
+            positionStride                      = view.byteStride / sizeof(float);
+            HS_ASSERT(view.byteStride % sizeof(float) == 0);
         }
 
         if (primitive.attributes.find("NORMAL") != primitive.attributes.end())
         {
-            const tinygltf::Accessor&  accessor  = model.accessors[primitive.attributes.find("NORMAL")->second];
-            const tinygltf::BufferView& view     = model.bufferViews[accessor.bufferView];
-            normalBuffer                         = reinterpret_cast<const float*>(&(model.buffers[view.buffer].data[accessor.byteOffset + view.byteOffset]));
+            const tinygltf::Accessor&  accessor = model.accessors[primitive.attributes.find("NORMAL")->second];
+            const tinygltf::BufferView& view    = model.bufferViews[accessor.bufferView];
+            normalBuffer                        = reinterpret_cast<const float*>(&(model.buffers[view.buffer].data[accessor.byteOffset + view.byteOffset]));
+            normalStride                        = view.byteStride / sizeof(float);
+            HS_ASSERT(view.byteStride % sizeof(float) == 0);
         }
 
         ObjectVertex* verts;
         RenderBufferEntry stagingVerts = g_Render->GetVertexCache()->BeginAlloc<ObjectVertex>(vertexCount, &verts);
 
+        const float* p = positionBuffer;
+        const float* n = normalBuffer;
         for (int i = 0; i < vertexCount; ++i)
         {
-            verts[i].position_ = Vec4(Vec3(&positionBuffer[i * 3]), 1);
+            verts[i].position_ = Vec4(Vec3(p), 1);
 
-            Vec3 normal = Vec3(&normalBuffer[i * 3]).Normalized();
+            Vec3 normal = Vec3(n).Normalized();
             verts[i].normal_ = Vec4(normal, 0);
+
+            p += positionStride;
+            n += normalStride;
         }
 
         g_Render->GetVertexCache()->EndAlloc();
