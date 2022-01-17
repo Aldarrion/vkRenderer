@@ -4,12 +4,16 @@
 #include "Render/Render.h"
 #include "Render/RenderBufferCache.h"
 #include "Render/Buffer.h"
+#include "Render/TinyGltf.h"
 
 #include "Input/Input.h"
 
 #include "Math/Math.h"
+#include "Common/Logging.h"
 
 #include "imgui/imgui.h"
+
+#include <string>
 
 namespace hs
 {
@@ -38,11 +42,34 @@ void DestroyGame()
 // TODO better obviously
 static VisualObject skybox;
 static VisualObject pbrBox[4];
-RenderBuffer g_BoxVertexBuffer;
-RenderBuffer g_BoxIndexBuffer;
+static RenderBuffer g_BoxVertexBuffer;
+static RenderBuffer g_BoxIndexBuffer;
+
+static VisualObject g_BoxModel;
+static RenderBuffer g_BoxModelVertexBuffer;
+static RenderBuffer g_BoxModelIndexBuffer;
 
 static UniquePtr<Material> skyboxMaterial;
 static UniquePtr<PBRMaterial> pbrMaterial[HS_ARR_LEN(pbrBox)];
+static UniquePtr<PBRMaterial> boxModelMaterial;
+
+void MakeVertexBufferBarrier(const RenderBuffer* buffer, VkBufferMemoryBarrier* barrier)
+{
+    barrier->sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER;
+    barrier->srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+    barrier->dstAccessMask = VK_ACCESS_VERTEX_ATTRIBUTE_READ_BIT;
+    barrier->buffer = buffer->GetBuffer();
+    barrier->size = buffer->GetSize();
+}
+
+void MakeIndexBufferBarrier(const RenderBuffer* buffer, VkBufferMemoryBarrier* barrier)
+{
+    barrier->sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER;
+    barrier->srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+    barrier->dstAccessMask = VK_ACCESS_INDEX_READ_BIT;
+    barrier->buffer = buffer->GetBuffer();
+    barrier->size = buffer->GetSize();
+}
 
 void CreatePbrBoxBuffers()
 {
@@ -117,17 +144,8 @@ void CreatePbrBoxBuffers()
     RenderCopyBuffer(g_Render->CmdBuff(), indexBuffer, stagingIndices);
 
     VkBufferMemoryBarrier barriers[2]{};
-    barriers[0].sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER;
-    barriers[0].srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
-    barriers[0].dstAccessMask = VK_ACCESS_VERTEX_ATTRIBUTE_READ_BIT;
-    barriers[0].buffer = g_BoxVertexBuffer.GetBuffer();
-    barriers[0].size = g_BoxVertexBuffer.GetSize();
-
-    barriers[1].sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER;
-    barriers[1].srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
-    barriers[1].dstAccessMask = VK_ACCESS_INDEX_READ_BIT;
-    barriers[1].buffer = g_BoxIndexBuffer.GetBuffer();
-    barriers[1].size = g_BoxIndexBuffer.GetSize();
+    MakeVertexBufferBarrier(&g_BoxVertexBuffer, &barriers[0]);
+    MakeIndexBufferBarrier(&g_BoxIndexBuffer, &barriers[1]);
 
     vkCmdPipelineBarrier(g_Render->CmdBuff(),
         VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_VERTEX_INPUT_BIT, 0,
@@ -138,10 +156,136 @@ void CreatePbrBoxBuffers()
 }
 
 //------------------------------------------------------------------------------
+static RESULT LoadBoxModel()
+{
+    tinygltf::TinyGLTF loader;
+    tinygltf::Model model;
+    std::string err;
+    std::string warn;
+
+    bool ret = loader.LoadBinaryFromFile(&model, &err, &warn, "models/Box/Box.glb");
+    if (!warn.empty())
+        LOG_WARN(err.c_str());
+
+    if (!err.empty())
+        LOG_ERR(err.c_str());
+
+    if (!ret)
+        return R_FAIL;
+
+    tinygltf::Mesh mesh = model.meshes[0];
+    tinygltf::Primitive primitive = mesh.primitives[0];
+
+    // Vertices
+    {
+        const float* positionBuffer{};
+        const float* normalBuffer{};
+        int vertexCount{};
+
+        if (primitive.attributes.find("POSITION") != primitive.attributes.end())
+        {
+            const tinygltf::Accessor&  accessor  = model.accessors[primitive.attributes.find("POSITION")->second];
+            const tinygltf::BufferView& view     = model.bufferViews[accessor.bufferView];
+            positionBuffer                       = reinterpret_cast<const float*>(&(model.buffers[view.buffer].data[accessor.byteOffset + view.byteOffset]));
+            vertexCount                          = (int)accessor.count;
+        }
+
+        if (primitive.attributes.find("NORMAL") != primitive.attributes.end())
+        {
+            const tinygltf::Accessor&  accessor  = model.accessors[primitive.attributes.find("NORMAL")->second];
+            const tinygltf::BufferView& view     = model.bufferViews[accessor.bufferView];
+            normalBuffer                         = reinterpret_cast<const float*>(&(model.buffers[view.buffer].data[accessor.byteOffset + view.byteOffset]));
+        }
+
+        ObjectVertex* verts;
+        RenderBufferEntry stagingVerts = g_Render->GetVertexCache()->BeginAlloc<ObjectVertex>(vertexCount, &verts);
+
+        for (int i = 0; i < vertexCount; ++i)
+        {
+            verts[i].position_ = Vec4(Vec3(&positionBuffer[i * 3]), 1);
+
+            Vec3 normal = Vec3(&normalBuffer[i * 3]).Normalized();
+            verts[i].normal_ = Vec4(normal, 0);
+        }
+
+        g_Render->GetVertexCache()->EndAlloc();
+
+        HS_CHECK(g_BoxModelVertexBuffer.Init(RenderBufferType::Vertex, RenderBufferMemory::DeviceLocal, vertexCount * sizeof(ObjectVertex)));
+        RenderBufferEntry vertexBuffer{ g_BoxModelVertexBuffer.GetBuffer(), 0, g_BoxModelVertexBuffer.GetSize() };
+        RenderCopyBuffer(g_Render->CmdBuff(), vertexBuffer, stagingVerts);
+    }
+
+    // Indices
+    {
+        const tinygltf::Accessor&   accessor   = model.accessors[primitive.indices];
+        const tinygltf::BufferView& bufferView = model.bufferViews[accessor.bufferView];
+        const tinygltf::Buffer&     buffer     = model.buffers[bufferView.buffer];
+
+        const int indexCount = (int)accessor.count;
+
+        uint* indices;
+        RenderBufferEntry stagingIndices = g_Render->GetIndexCache()->BeginAlloc<uint>(indexCount, &indices);
+
+        switch (accessor.componentType)
+        {
+            case TINYGLTF_PARAMETER_TYPE_UNSIGNED_INT:
+                for (int i = 0; i < indexCount; ++i)
+                    indices[i] = *(reinterpret_cast<const uint*>(&buffer.data[accessor.byteOffset + bufferView.byteOffset]) + i);
+                break;
+            case TINYGLTF_PARAMETER_TYPE_UNSIGNED_SHORT:
+                for (int i = 0; i < indexCount; ++i)
+                    indices[i] = *(reinterpret_cast<const uint16*>(&buffer.data[accessor.byteOffset + bufferView.byteOffset]) + i);
+                break;
+            case TINYGLTF_PARAMETER_TYPE_UNSIGNED_BYTE:
+                for (int i = 0; i < indexCount; ++i)
+                    indices[i] = *(reinterpret_cast<const uint8*>(&buffer.data[accessor.byteOffset + bufferView.byteOffset]) + i);
+                break;
+            default:
+                HS_ASSERT(false);
+        }
+
+        g_Render->GetIndexCache()->EndAlloc();
+
+        HS_CHECK(g_BoxModelIndexBuffer.Init(RenderBufferType::Index, RenderBufferMemory::DeviceLocal, indexCount * sizeof(uint)));
+        RenderBufferEntry indexBuffer{ g_BoxModelIndexBuffer.GetBuffer(), 0, g_BoxModelIndexBuffer.GetSize() };
+        RenderCopyBuffer(g_Render->CmdBuff(), indexBuffer, stagingIndices);
+    }
+
+    VkBufferMemoryBarrier barriers[2]{};
+    MakeVertexBufferBarrier(&g_BoxModelVertexBuffer, &barriers[0]);
+    MakeIndexBufferBarrier(&g_BoxModelIndexBuffer, &barriers[1]);
+
+    vkCmdPipelineBarrier(g_Render->CmdBuff(),
+        VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_VERTEX_INPUT_BIT, 0,
+        0, nullptr,
+        HS_ARR_LEN(barriers), barriers,
+        0, nullptr
+    );
+
+    return R_OK;
+}
+
+//------------------------------------------------------------------------------
 RESULT VkrGame::Init()
 {
     CameraInitAsPerspective(g_Render->GetCamera(), Vec3(0, 0, 0), Vec3(0, 0, 1));
     freeflyCamera_.camera_ = g_Render->GetCamera();
+
+    if (HS_FAILED(LoadBoxModel()))
+        return R_FAIL;
+
+    boxModelMaterial = MakeUnique<PBRMaterial>();
+    if (HS_FAILED(boxModelMaterial->Init()))
+        return R_FAIL;
+
+    boxModelMaterial->SetAlbedo(Vec3(0.8f, 0, 0));
+
+    g_BoxModel.vertexBuffer_.buffer_ = RenderBufferEntry{ g_BoxModelVertexBuffer.GetBuffer(), 0, g_BoxModelVertexBuffer.GetSize() };
+    g_BoxModel.vertexBuffer_.vertexSize_ = sizeof(ObjectVertex);
+    g_BoxModel.indexBuffer_.buffer_ = RenderBufferEntry{ g_BoxModelIndexBuffer.GetBuffer(), 0, g_BoxModelIndexBuffer.GetSize() };
+    g_BoxModel.transform_ = Mat44::Scale(2);
+    g_BoxModel.transform_.SetPosition(Vec3(0, 0, 10));
+    g_BoxModel.material_ = boxModelMaterial.Get();
 
     // Skybox
     skyboxMaterial = MakeUnique<SkyboxMaterial>();
@@ -220,12 +364,16 @@ void VkrGame::Update()
     ImGui::End();
 
     g_Render->RenderObjects(MakeSpan(pbrBox));
+    g_Render->RenderObject(&g_BoxModel);
 }
 
 //------------------------------------------------------------------------------
 void VkrGame::Free()
 {
     g_BoxVertexBuffer.Free();
+    g_BoxIndexBuffer.Free();
+    g_BoxModelVertexBuffer.Free();
+    g_BoxModelIndexBuffer.Free();
 }
 
 }
