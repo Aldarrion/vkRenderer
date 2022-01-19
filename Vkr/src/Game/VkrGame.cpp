@@ -80,30 +80,30 @@ void CreatePbrBoxBuffers()
     ObjectVertex* verts;
     RenderBufferEntry stagingVerts = g_Render->GetVertexCache()->BeginAlloc(boxBufferSize, sizeof(ObjectVertex), (void**)&verts);
 
-    verts[0] = ObjectVertex{ Vec4(-1.0, 1.0, -1.0, 1), Vec4(0.0, 1.0, 0.0, 1) };
-    verts[1] = ObjectVertex{ Vec4(1.0, 1.0, -1.0, 1), Vec4(0.0, 1.0, 0.0, 1) };
-    verts[2] = ObjectVertex{ Vec4(1.0, 1.0, 1.0, 1), Vec4(0.0, 1.0, 0.0, 1) };
-    verts[3] = ObjectVertex{ Vec4(-1.0, 1.0, 1.0, 1), Vec4(0.0, 1.0, 0.0, 1) };
-    verts[4] = ObjectVertex{ Vec4(-1.0, -1.0, -1.0, 1), Vec4(0.0, -1.0, 0.0, 1) };
-    verts[5] = ObjectVertex{ Vec4(1.0, -1.0, -1.0, 1), Vec4(0.0, -1.0, 0.0, 1) };
-    verts[6] = ObjectVertex{ Vec4(1.0, -1.0, 1.0, 1), Vec4(0.0, -1.0, 0.0, 1) };
-    verts[7] = ObjectVertex{ Vec4(-1.0, -1.0, 1.0, 1), Vec4(0.0, -1.0, 0.0, 1) };
-    verts[8] = ObjectVertex{ Vec4(-1.0, -1.0, 1.0, 1), Vec4(-1.0, 0.0, 0.0, 1) };
-    verts[9] = ObjectVertex{ Vec4(-1.0, -1.0, -1.0, 1), Vec4(-1.0, 0.0, 0.0, 1) };
-    verts[10] = ObjectVertex{ Vec4(-1.0, 1.0, -1.0, 1), Vec4(-1.0, 0.0, 0.0, 1) };
-    verts[11] = ObjectVertex{ Vec4(-1.0, 1.0, 1.0, 1), Vec4(-1.0, 0.0, 0.0, 1) };
-    verts[12] = ObjectVertex{ Vec4(1.0, -1.0, 1.0, 1), Vec4(1.0, 0.0, 0.0, 1) };
-    verts[13] = ObjectVertex{ Vec4(1.0, -1.0, -1.0, 1), Vec4(1.0, 0.0, 0.0, 1) };
-    verts[14] = ObjectVertex{ Vec4(1.0, 1.0, -1.0, 1), Vec4(1.0, 0.0, 0.0, 1) };
-    verts[15] = ObjectVertex{ Vec4(1.0, 1.0, 1.0, 1), Vec4(1.0, 0.0, 0.0, 1) };
-    verts[16] = ObjectVertex{ Vec4(-1.0, -1.0, -1.0, 1), Vec4(0.0, 0.0, -1.0, 1) };
-    verts[17] = ObjectVertex{ Vec4(1.0, -1.0, -1.0, 1), Vec4(0.0, 0.0, -1.0, 1) };
-    verts[18] = ObjectVertex{ Vec4(1.0, 1.0, -1.0, 1), Vec4(0.0, 0.0, -1.0, 1) };
-    verts[19] = ObjectVertex{ Vec4(-1.0, 1.0, -1.0, 1), Vec4(0.0, 0.0, -1.0, 1) };
-    verts[20] = ObjectVertex{ Vec4(-1.0, -1.0, 1.0, 1), Vec4(0.0, 0.0, 1.0, 1) };
-    verts[21] = ObjectVertex{ Vec4(1.0, -1.0, 1.0, 1), Vec4(0.0, 0.0, 1.0, 1) };
-    verts[22] = ObjectVertex{ Vec4(1.0, 1.0, 1.0, 1), Vec4(0.0, 0.0, 1.0, 1) };
-    verts[23] = ObjectVertex{ Vec4(-1.0, 1.0, 1.0, 1), Vec4(0.0, 0.0, 1.0, 1) };
+    verts[0] = ObjectVertex{ Vec3(-1.0, 1.0, -1.0),      Vec3(0.0, 1.0, 0.0) };
+    verts[1] = ObjectVertex{ Vec3(1.0, 1.0, -1.0),       Vec3(0.0, 1.0, 0.0) };
+    verts[2] = ObjectVertex{ Vec3(1.0, 1.0, 1.0),        Vec3(0.0, 1.0, 0.0) };
+    verts[3] = ObjectVertex{ Vec3(-1.0, 1.0, 1.0),       Vec3(0.0, 1.0, 0.0) };
+    verts[4] = ObjectVertex{ Vec3(-1.0, -1.0, -1.0),     Vec3(0.0, -1.0, 0.0) };
+    verts[5] = ObjectVertex{ Vec3(1.0, -1.0, -1.0),      Vec3(0.0, -1.0, 0.0) };
+    verts[6] = ObjectVertex{ Vec3(1.0, -1.0, 1.0),       Vec3(0.0, -1.0, 0.0) };
+    verts[7] = ObjectVertex{ Vec3(-1.0, -1.0, 1.0),      Vec3(0.0, -1.0, 0.0) };
+    verts[8] = ObjectVertex{ Vec3(-1.0, -1.0, 1.0),      Vec3(-1.0, 0.0, 0.0) };
+    verts[9] = ObjectVertex{ Vec3(-1.0, -1.0, -1.0),     Vec3(-1.0, 0.0, 0.0) };
+    verts[10] = ObjectVertex{ Vec3(-1.0, 1.0, -1.0),     Vec3(-1.0, 0.0, 0.0) };
+    verts[11] = ObjectVertex{ Vec3(-1.0, 1.0, 1.0),      Vec3(-1.0, 0.0, 0.0) };
+    verts[12] = ObjectVertex{ Vec3(1.0, -1.0, 1.0),      Vec3(1.0, 0.0, 0.0) };
+    verts[13] = ObjectVertex{ Vec3(1.0, -1.0, -1.0),     Vec3(1.0, 0.0, 0.0) };
+    verts[14] = ObjectVertex{ Vec3(1.0, 1.0, -1.0),      Vec3(1.0, 0.0, 0.0) };
+    verts[15] = ObjectVertex{ Vec3(1.0, 1.0, 1.0),       Vec3(1.0, 0.0, 0.0) };
+    verts[16] = ObjectVertex{ Vec3(-1.0, -1.0, -1.0),    Vec3(0.0, 0.0, -1.0) };
+    verts[17] = ObjectVertex{ Vec3(1.0, -1.0, -1.0),     Vec3(0.0, 0.0, -1.0) };
+    verts[18] = ObjectVertex{ Vec3(1.0, 1.0, -1.0),      Vec3(0.0, 0.0, -1.0) };
+    verts[19] = ObjectVertex{ Vec3(-1.0, 1.0, -1.0),     Vec3(0.0, 0.0, -1.0) };
+    verts[20] = ObjectVertex{ Vec3(-1.0, -1.0, 1.0),     Vec3(0.0, 0.0, 1.0) };
+    verts[21] = ObjectVertex{ Vec3(1.0, -1.0, 1.0),      Vec3(0.0, 0.0, 1.0) };
+    verts[22] = ObjectVertex{ Vec3(1.0, 1.0, 1.0),       Vec3(0.0, 0.0, 1.0) };
+    verts[23] = ObjectVertex{ Vec3(-1.0, 1.0, 1.0),      Vec3(0.0, 0.0, 1.0) };
 
     g_Render->GetVertexCache()->EndAlloc();
 
@@ -180,8 +180,10 @@ static RESULT LoadBoxModel()
     {
         const float* positionBuffer{};
         const float* normalBuffer{};
+        const float* texcoordBuffer{};
         int positionStride{};
         int normalStride{};
+        int texcoordStride{};
         int vertexCount{};
 
         if (primitive.attributes.find("POSITION") != primitive.attributes.end())
@@ -203,17 +205,35 @@ static RESULT LoadBoxModel()
             HS_ASSERT(view.byteStride % sizeof(float) == 0);
         }
 
+        if (primitive.attributes.find("TEXCOORD_0") != primitive.attributes.end())
+        {
+            const tinygltf::Accessor& accessor  = model.accessors[primitive.attributes.find("TEXCOORD_0")->second];
+            const tinygltf::BufferView& view    = model.bufferViews[accessor.bufferView];
+            texcoordBuffer                      = reinterpret_cast<const float *>(&(model.buffers[view.buffer].data[accessor.byteOffset + view.byteOffset]));
+            texcoordStride                      = view.byteStride / sizeof(float);
+            HS_ASSERT(view.byteStride % sizeof(float) == 0);
+        }
+
         ObjectVertex* verts;
         RenderBufferEntry stagingVerts = g_Render->GetVertexCache()->BeginAlloc<ObjectVertex>(vertexCount, &verts);
 
         const float* p = positionBuffer;
         const float* n = normalBuffer;
+        const float* t = texcoordBuffer;
         for (int i = 0; i < vertexCount; ++i)
         {
-            verts[i].position_ = Vec4(Vec3(p), 1);
+            verts[i].position_ = Vec3(p);
+            verts[i].normal_ = Vec3(n).Normalized();
 
-            Vec3 normal = Vec3(n).Normalized();
-            verts[i].normal_ = Vec4(normal, 0);
+            if (t)
+            {
+                verts[i].uv_ = Vec2(t);
+                t += texcoordStride;
+            }
+            else
+            {
+                verts[i].uv_ = Vec2{};
+            }
 
             p += positionStride;
             n += normalStride;
@@ -240,14 +260,17 @@ static RESULT LoadBoxModel()
         switch (accessor.componentType)
         {
             case TINYGLTF_PARAMETER_TYPE_UNSIGNED_INT:
+                HS_ASSERT(bufferView.byteStride == 0 || bufferView.byteStride == 4);
                 for (int i = 0; i < indexCount; ++i)
                     indices[i] = *(reinterpret_cast<const uint*>(&buffer.data[accessor.byteOffset + bufferView.byteOffset]) + i);
                 break;
             case TINYGLTF_PARAMETER_TYPE_UNSIGNED_SHORT:
+                HS_ASSERT(bufferView.byteStride == 0 || bufferView.byteStride == 2);
                 for (int i = 0; i < indexCount; ++i)
                     indices[i] = *(reinterpret_cast<const uint16*>(&buffer.data[accessor.byteOffset + bufferView.byteOffset]) + i);
                 break;
             case TINYGLTF_PARAMETER_TYPE_UNSIGNED_BYTE:
+                HS_ASSERT(bufferView.byteStride == 0 || bufferView.byteStride == 1);
                 for (int i = 0; i < indexCount; ++i)
                     indices[i] = *(reinterpret_cast<const uint8*>(&buffer.data[accessor.byteOffset + bufferView.byteOffset]) + i);
                 break;
