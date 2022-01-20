@@ -5,6 +5,7 @@
 #include "Render/RenderBufferCache.h"
 #include "Render/Buffer.h"
 #include "Render/TinyGltf.h"
+#include "Render/Texture.h"
 
 #include "Input/Input.h"
 
@@ -48,6 +49,9 @@ static RenderBuffer g_BoxIndexBuffer;
 static VisualObject g_BoxModel;
 static RenderBuffer g_BoxModelVertexBuffer;
 static RenderBuffer g_BoxModelIndexBuffer;
+static Texture      g_BoxModelAlbedo;
+
+static Texture      g_Tex2DWhite;
 
 static UniquePtr<Material> skyboxMaterial;
 static UniquePtr<PBRMaterial> pbrMaterial[HS_ARR_LEN(pbrBox)];
@@ -163,7 +167,7 @@ static RESULT LoadBoxModel()
     std::string err;
     std::string warn;
 
-    bool ret = loader.LoadBinaryFromFile(&model, &err, &warn, "models/Box/BoxInterleaved.glb");
+    bool ret = loader.LoadBinaryFromFile(&model, &err, &warn, "models/Box/BoxTextured.glb");
     if (!warn.empty())
         LOG_WARN(err.c_str());
 
@@ -186,9 +190,10 @@ static RESULT LoadBoxModel()
         int texcoordStride{};
         int vertexCount{};
 
-        if (primitive.attributes.find("POSITION") != primitive.attributes.end())
+        auto posIter = primitive.attributes.find("POSITION");
+        if (posIter != primitive.attributes.end())
         {
-            const tinygltf::Accessor&  accessor = model.accessors[primitive.attributes.find("POSITION")->second];
+            const tinygltf::Accessor&  accessor = model.accessors[posIter->second];
             const tinygltf::BufferView& view    = model.bufferViews[accessor.bufferView];
             positionBuffer                      = reinterpret_cast<const float*>(&(model.buffers[view.buffer].data[accessor.byteOffset + view.byteOffset]));
             vertexCount                         = (int)accessor.count;
@@ -196,18 +201,20 @@ static RESULT LoadBoxModel()
             HS_ASSERT(view.byteStride % sizeof(float) == 0);
         }
 
-        if (primitive.attributes.find("NORMAL") != primitive.attributes.end())
+        auto normalIter = primitive.attributes.find("NORMAL");
+        if (normalIter != primitive.attributes.end())
         {
-            const tinygltf::Accessor&  accessor = model.accessors[primitive.attributes.find("NORMAL")->second];
+            const tinygltf::Accessor&  accessor = model.accessors[normalIter->second];
             const tinygltf::BufferView& view    = model.bufferViews[accessor.bufferView];
             normalBuffer                        = reinterpret_cast<const float*>(&(model.buffers[view.buffer].data[accessor.byteOffset + view.byteOffset]));
             normalStride                        = view.byteStride / sizeof(float);
             HS_ASSERT(view.byteStride % sizeof(float) == 0);
         }
 
-        if (primitive.attributes.find("TEXCOORD_0") != primitive.attributes.end())
+        auto uvIter = primitive.attributes.find("TEXCOORD_0");
+        if (uvIter != primitive.attributes.end())
         {
-            const tinygltf::Accessor& accessor  = model.accessors[primitive.attributes.find("TEXCOORD_0")->second];
+            const tinygltf::Accessor& accessor  = model.accessors[uvIter->second];
             const tinygltf::BufferView& view    = model.bufferViews[accessor.bufferView];
             texcoordBuffer                      = reinterpret_cast<const float *>(&(model.buffers[view.buffer].data[accessor.byteOffset + view.byteOffset]));
             texcoordStride                      = view.byteStride / sizeof(float);
@@ -285,6 +292,54 @@ static RESULT LoadBoxModel()
         RenderCopyBuffer(g_Render->CmdBuff(), indexBuffer, stagingIndices);
     }
 
+    // Textures
+    {
+        const tinygltf::Material& material = model.materials[0];
+
+        auto albedoIter = material.values.find("baseColorTexture");
+        if (albedoIter != material.values.end())
+        {
+            int albedoIdx = albedoIter->second.TextureIndex();
+            const tinygltf::Image& image = model.images[albedoIdx];
+
+            int bufferSize = -1;
+            const unsigned char* buffer{};
+            bool deleteBuffer = false;
+            if (image.component == 3)
+            {
+                bufferSize = image.width * image.height * 4;
+                unsigned char* rgba = new unsigned char[bufferSize]; // TODO(pavel): Do not allocate for every texture;
+                const unsigned char* rgb = &image.image[0];
+                for (size_t i = 0; i < image.width * image.height; ++i) {
+                    memcpy(rgba, rgb, sizeof(unsigned char) * 3);
+                    rgba += 4;
+                    rgb += 3;
+                }
+                buffer = rgba;
+                deleteBuffer = true;
+            }
+            else
+            {
+                buffer = &image.image[0];
+                bufferSize = image.image.size();
+            }
+
+            g_BoxModelAlbedo.Init(VK_FORMAT_R8G8B8A8_SRGB, VkExtent3D{ (uint)image.width, (uint)image.height, 1 }, Texture::Type::TEX_2D);
+            if (HS_FAILED(g_BoxModelAlbedo.Allocate((const void**)&buffer, "BoxModelAlbedo")))
+                return R_FAIL;
+
+            if (deleteBuffer)
+                delete buffer;
+        }
+
+        g_Tex2DWhite.Init(VK_FORMAT_R8G8B8A8_SRGB, VkExtent3D{ 2, 2, 1 }, Texture::Type::TEX_2D);
+        unsigned char whiteTexData[2 * 2 * 4];
+        memset(whiteTexData, 0xff, sizeof(whiteTexData));
+        unsigned char* ptr = whiteTexData;
+        if (HS_FAILED(g_Tex2DWhite.Allocate((const void**)&ptr, "DummyWhite")))
+            return R_FAIL;
+    }
+
     VkBufferMemoryBarrier barriers[2]{};
     MakeVertexBufferBarrier(&g_BoxModelVertexBuffer, &barriers[0]);
     MakeIndexBufferBarrier(&g_BoxModelIndexBuffer, &barriers[1]);
@@ -312,7 +367,8 @@ RESULT VkrGame::Init()
     if (HS_FAILED(boxModelMaterial->Init()))
         return R_FAIL;
 
-    boxModelMaterial->SetAlbedo(Vec3(0.8f, 0, 0));
+    boxModelMaterial->albedo_ = Vec3(0.8f, 0, 0);
+    boxModelMaterial->albedoTex_ = &g_BoxModelAlbedo;
 
     g_BoxModel.vertexBuffer_.buffer_ = RenderBufferEntry{ g_BoxModelVertexBuffer.GetBuffer(), 0, g_BoxModelVertexBuffer.GetSize() };
     g_BoxModel.vertexBuffer_.vertexSize_ = sizeof(ObjectVertex);
@@ -336,6 +392,8 @@ RESULT VkrGame::Init()
         pbrMaterial[i] = MakeUnique<PBRMaterial>();
         if (HS_FAILED(pbrMaterial[i]->Init()))
             return R_FAIL;
+
+        pbrMaterial[i]->albedoTex_ = &g_Tex2DWhite;
 
         pbrBox[i].material_ = pbrMaterial[i].Get();
         pbrBox[i].transform_ = Mat44::Scale(3);
@@ -381,20 +439,20 @@ void VkrGame::Update()
         ImGui::SliderInt("Box idx", &boxIdx, 0, HS_ARR_LEN(pbrBox) - 1);
 
         auto mat = ((PBRMaterial*)pbrBox[boxIdx].material_);
-        Vec3 albedo = mat->GetAlbedo();
-        float roughness = mat->GetRoughness();
-        float metallic = mat->GetMetallic();
-        float ao = mat->GetAo();
+        Vec3 albedo = mat->albedo_;
+        float roughness = mat->roughness_;
+        float metallic = mat->metallic_;
+        float ao = mat->ao_;
 
         ImGui::ColorPicker3("Albedo", albedo.v);
         ImGui::SliderFloat("Roughness", &roughness, 0, 1);
         ImGui::SliderFloat("Metellic", &metallic, 0, 1);
         ImGui::SliderFloat("Ambient", &ao, 0, 1);
 
-        mat->SetAlbedo(albedo);
-        mat->SetRoughness(roughness);
-        mat->SetMetallic(metallic);
-        mat->SetAo(ao);
+        mat->albedo_ = albedo;
+        mat->roughness_ = roughness;
+        mat->metallic_ = metallic;
+        mat->ao_ = ao;
     ImGui::End();
 
     g_Render->RenderObjects(MakeSpan(pbrBox));
@@ -408,6 +466,7 @@ void VkrGame::Free()
     g_BoxIndexBuffer.Free();
     g_BoxModelVertexBuffer.Free();
     g_BoxModelIndexBuffer.Free();
+    g_BoxModelAlbedo.Free();
 }
 
 }
