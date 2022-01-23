@@ -367,7 +367,7 @@ RESULT VkrGame::Init()
     if (HS_FAILED(boxModelMaterial->Init()))
         return R_FAIL;
 
-    boxModelMaterial->albedo_ = Vec3(0.8f, 0, 0);
+    boxModelMaterial->albedo_ = Vec3(1, 1, 1);
     boxModelMaterial->albedoTex_ = &g_BoxModelAlbedo;
 
     g_BoxModel.vertexBuffer_.buffer_ = RenderBufferEntry{ g_BoxModelVertexBuffer.GetBuffer(), 0, g_BoxModelVertexBuffer.GetSize() };
